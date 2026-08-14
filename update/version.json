@@ -1,8 +1,8 @@
 {
   "version": "0.5.0",
-  "released": "2026-08-14",
-  "notes": "первая версия под именем Tau Till",
-  "base": "",
+  "released": "2026-08-15",
+  "notes": "",
+  "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
       "path": "server.py",
