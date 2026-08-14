@@ -1,0 +1,49 @@
+{
+  "version": "0.5.0",
+  "released": "2026-08-14",
+  "notes": "первая версия под именем Tau Till",
+  "base": "",
+  "files": [
+    {
+      "path": "server.py",
+      "sha256": "acf6d7bcdf7ce9167ad359c223fb1bd56f3149bf8fb7f884c4c19235639a9e21",
+      "size": 41636
+    },
+    {
+      "path": "db.py",
+      "sha256": "a0616dd3f151319d72d460cbc5fcad161fdaccd81691e28d15a0747ceb1ad2f8",
+      "size": 17702
+    },
+    {
+      "path": "printer.py",
+      "sha256": "1c2d46eadef79be332c43f30062da259aab57ce7368a34e36c90f63965e69544",
+      "size": 8547
+    },
+    {
+      "path": "winprint.py",
+      "sha256": "f1a36954f2cd5a59455974e62e74bb812d6a015884133b1fea5f5f77edfc8c28",
+      "size": 7134
+    },
+    {
+      "path": "xlsx.py",
+      "sha256": "e59c3a65531f47f47fd6f3c529e0382ff761185241b82d6ec623c9c5703d3cd1",
+      "size": 1997
+    },
+    {
+      "path": "version.py",
+      "sha256": "e0e04fea6d36e24700ac0015d27b649e56506e269e307e45b48412eda525b23f",
+      "size": 869
+    },
+    {
+      "path": "index.html",
+      "sha256": "187b1d3f9762d19e7e5021f2bee4845cfd067e03372e1a68ca3726e064b3944a",
+      "size": 105875
+    },
+    {
+      "path": "pack/win/launch.py",
+      "sha256": "a030814e47bcc8ef6809318dfab80704223299c9a6b4467981251eb611235111",
+      "size": 30839,
+      "as": "launch.py"
+    }
+  ]
+}

@@ -1,0 +1,2395 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Касса</title>
+<style>
+  :root{
+    --bg:#eef1f4; --panel:#fff; --line:#c8d0d8; --ink:#16202a; --muted:#6b7a88;
+    --accent:#00a6c4; --accent-ink:#fff; --green:#1f9d55; --red:#e2586c;
+    --warn:#b8860b;
+  }
+  *{box-sizing:border-box}
+  html{height:100%}
+  /* The till screen is 1024x768 and cannot grow, so the page itself never
+     scrolls.  The header sits on top, the open tab takes exactly the rest of
+     the height, and anything too long scrolls inside its own box.  Without
+     this the ОПЛАТА button slid off the bottom edge as soon as the cart passed
+     seven lines, and nobody behind the counter would think to scroll for it. */
+  body{margin:0;height:100%;display:flex;flex-direction:column;overflow:hidden;
+       font:15px/1.4 system-ui,'Segoe UI',sans-serif;background:var(--bg);color:var(--ink)}
+  header{flex:none;display:flex;align-items:center;gap:16px;background:var(--green);color:#fff;padding:0 12px;height:44px}
+  header .brand{font-weight:700;letter-spacing:.5px}
+  header .meta{font-size:13px;opacity:.9}
+  nav{margin-left:auto;display:flex;height:100%}
+  nav button{background:transparent;border:0;color:#fff;padding:0 18px;font:600 14px system-ui;cursor:pointer;letter-spacing:.5px}
+  nav button.on{background:var(--panel);color:var(--ink)}
+  main{flex:1;min-height:0;overflow-y:auto;width:100%;
+       padding:12px;max-width:1100px;margin:0 auto}
+  /* The sale tab fills the screen exactly: search on top, cart in the middle
+     taking whatever is left, totals and keys always at the bottom. */
+  /* :not([hidden]) is not decoration.  A bare `display:flex` here outranks the
+     browser's own rule for the hidden attribute, and the sale screen would
+     stay on top of every other tab. */
+  #tab-sale:not([hidden]){display:flex;flex-direction:column;height:100%}
+  #tab-sale .foot{flex:none}
+  /* A search that matches a dozen goods used to push the cart and the ОПЛАТА
+     button off the bottom edge.  The list of matches scrolls on its own
+     instead, and gives up its space first when the screen runs short. */
+  #results{flex:0 1 auto;min-height:0;max-height:32vh;overflow-y:auto}
+  /* While the on-screen keyboard is up the screen is 300px shorter.  The
+     cart gives up that space rather than letting ОПЛАТА slide under the
+     keys: nobody reads the list of goods while typing a name anyway. */
+  body.kbd-open .cart{min-height:60px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px}
+  .search{display:flex;gap:8px;margin-bottom:12px}
+  .search input{flex:1;padding:12px 14px;font-size:18px;border:2px solid var(--accent);border-radius:6px;outline:none}
+  table{width:100%;border-collapse:collapse}
+  th{background:#f4f7f9;font-size:12px;letter-spacing:.4px;color:var(--muted);text-align:left;padding:8px;border-bottom:1px solid var(--line)}
+  td{padding:8px;border-bottom:1px solid #eef1f4}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  tr.sel{background:#e3f4f8}
+  /* The list of goods is the only part that grows, so it is the part that
+     scrolls.  The header row stays put while it does. */
+  .cart{flex:1;min-height:120px;overflow-y:auto}
+  .cart thead th{position:sticky;top:0;z-index:1}
+  .foot{display:grid;grid-template-columns:1fr auto;gap:12px;margin-top:12px}
+  .total{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 18px}
+  .total .row{display:flex;justify-content:space-between;font-size:15px;color:var(--muted)}
+  .total .big{font-size:30px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+  .keys{display:grid;grid-template-columns:repeat(3,minmax(96px,1fr));gap:8px}
+  .keys button{padding:14px 8px;border:1px solid var(--line);background:#fbfcfd;border-radius:6px;font:600 12px system-ui;cursor:pointer;letter-spacing:.3px}
+  .keys button:hover{background:#f0f4f7}
+  .keys .pay{grid-column:span 3;background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-size:18px;padding:20px 8px}
+  .keys .del1{background:var(--red);color:#fff;border-color:var(--red)}
+  .keys #extras{background:#eef2f6;line-height:1.25}
+  .keys #qty-set{background:#e3f4f8;border-color:var(--accent)}
+  .keys #universal, .keys #newitem{background:#eef2f6;line-height:1.25}
+  .keys #discount{background:#fff6e0;border-color:#d8b45a}
+  td.disc{cursor:pointer}
+  /* «50.00 %» must stay on one line -- the column is narrow enough that the
+     default wrap would break it after the number and double the row height. */
+  td.disc b{display:inline-block;padding:3px 7px;border-radius:4px;white-space:nowrap;
+     background:#fff6e0;border:1px solid #e0cb96;font-variant-numeric:tabular-nums}
+  tr.sel td.disc b{background:#fff}
+  /* Must out-rank the rule above, or a discount on the selected row would be
+     white text on a white chip -- i.e. invisible. */
+  td.disc.has b, tr.sel td.disc.has b{
+     background:var(--warn);border-color:var(--warn);color:#fff}
+  .strike{color:var(--muted);text-decoration:line-through;font-size:12px}
+  .hint{color:var(--muted);font-size:13px;padding:24px;text-align:center}
+  form.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;padding:14px}
+  form.grid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+  form.grid input{padding:9px;border:1px solid var(--line);border-radius:4px;font-size:15px}
+  form.grid .actions{grid-column:1/-1;display:flex;gap:8px}
+  .codeline{display:flex;gap:6px}
+  .codeline input{flex:1;min-width:0}
+  .codeline button{flex:none;width:44px;min-height:44px;border:1px solid var(--line);background:#eef2f6;
+     border-radius:4px;font:700 20px system-ui;cursor:pointer;color:var(--accent)}
+  .extracodes{grid-column:1/-1;display:grid;
+     grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+  .extracodes:empty{display:none}
+  .extracodes label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+  .extracodes .codeline button{color:var(--red)}
+  .knowncodes{grid-column:1/-1;font-size:13px;color:var(--muted);padding:2px 0}
+  button.primary{padding:11px 20px;background:var(--accent);color:#fff;border:0;border-radius:6px;font:600 14px system-ui;cursor:pointer}
+  .panel > .actions{display:flex;gap:8px;padding:14px 14px 0}
+  .panel > .actions input{padding:11px;border:1px solid var(--line);border-radius:6px;font-size:16px}
+  .panel > .actions button{padding:11px 16px;background:var(--panel);border:1px solid var(--line);border-radius:6px;font:600 13px system-ui;cursor:pointer}
+  .panel > .actions button.on{background:#e3f4f8;border-color:var(--accent)}
+  #s-info{padding:8px 14px 0;text-align:left}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px}
+  .card .k{font-size:12px;color:var(--muted);letter-spacing:.4px}
+  .card .v{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:4px}
+  /* ---------- payment screen ---------- */
+  .modal{position:fixed;inset:0;background:rgba(10,20,30,.55);display:flex;
+         align-items:center;justify-content:center;z-index:50;padding:12px}
+  .modal[hidden]{display:none}
+  /* The box is a FIXED size in every mode: switching Наличная/Безналичная/
+     Смешанная must never move a button out from under a finger. */
+  .paybox{background:#eef1f6;border-radius:8px;width:560px;max-width:100%;
+          max-height:96vh;overflow:auto;box-shadow:0 18px 60px rgba(0,0,0,.4)}
+  .payhead{padding:14px 26px 12px}
+  .payhead .prow{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:baseline}
+  .payhead .k{font-size:19px;font-weight:600;letter-spacing:.5px;text-align:right}
+  .payhead .v{font-size:23px;font-weight:700;font-variant-numeric:tabular-nums}
+  .payhead .got .v{color:#1c7a54}
+  .payhead .chg .v{color:#c0392b}
+  .paytabs{display:grid;grid-template-columns:repeat(3,1fr);padding:0 22px}
+  .paytabs button{padding:12px 4px;font:600 16px system-ui;cursor:pointer;
+     border:1px solid #b9c5d2;background:#dbe3ec;color:#2b3947}
+  .paytabs button + button{border-left:0}
+  .paytabs button.on{background:#aebccc;color:#0f1a24;
+     box-shadow:inset 0 2px 5px rgba(0,0,0,.22)}
+  .paybody{padding:12px 22px 0}
+  /* Both slots are always laid out; the unused one keeps its space so the
+     keypad below never shifts between payment modes. */
+  .payfields{display:grid;gap:9px;margin-bottom:10px}
+  .field{display:flex;align-items:center;gap:10px;background:#fff;
+     border:2px solid #c3ced9;border-radius:6px;padding:8px 14px}
+  .field.off{visibility:hidden}
+  .field.sel{border-color:#2f9ee0;box-shadow:0 0 0 2px rgba(47,158,224,.18)}
+  .field svg{flex:none;color:#4a5b6b}
+  .field input{flex:1;width:100%;border:0;outline:none;background:transparent;
+     font:700 25px system-ui;font-variant-numeric:tabular-nums;color:#16202a;min-width:0}
+  .field .suffix{flex:none;font:700 20px system-ui;color:#4a5b6b;padding-left:4px}
+  #p-pad{grid-template-columns:repeat(5,1fr)}
+  #dc-pad{grid-template-columns:repeat(4,1fr)}
+  #discmodal .paytabs{grid-template-columns:repeat(2,1fr)}
+  .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+  .pad button{padding:13px 4px;font:600 23px system-ui;color:#2b3947;
+     border:1px solid #c3ced9;border-radius:5px;cursor:pointer;
+     background:linear-gradient(#f6f9fc,#dde5ee)}
+  .pad button:active{background:#c9d5e1}
+  .pad button.add{font-size:18px;font-variant-numeric:tabular-nums}
+  .pad button.warn{background:#c9646f;border-color:#b4525d;color:#fff}
+  .pad button.warn:active{background:#b4525d}
+  .pad button.wide{grid-column:span 2}
+  .paymsg{min-height:26px;text-align:center;font-size:15px;font-weight:600;
+     color:#c0392b;padding:2px 0 6px}
+  /* Pinned to the bottom of the box: if a dialog ever does outgrow the screen,
+     the buttons that finish or cancel it must stay where the finger expects
+     them instead of hiding below the fold. */
+  .payfoot{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
+     padding:4px 22px 16px;position:sticky;bottom:0;background:#eef1f6}
+  .payfoot button{padding:15px 6px;font:700 17px system-ui;letter-spacing:.5px;
+     border:0;border-radius:6px;cursor:pointer;color:#fff}
+  .payfoot .cancel{background:#c9646f}
+  .payfoot .exact{background:#7e93ab}
+  .payfoot .confirm{background:#1fbfbe}
+  .payfoot button:disabled{opacity:.45;cursor:not-allowed}
+  .note{color:var(--muted);font-size:15px;text-align:center;padding:22px 8px;line-height:1.6}
+
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#16202a;color:#fff;padding:12px 20px;border-radius:6px;opacity:0;transition:.2s;pointer-events:none;max-width:80vw}
+  .toast.show{opacity:1}
+  .toast.err{background:var(--red)}
+  .low{color:var(--warn);font-weight:600}
+  /* ---------- cashier login ---------- */
+  .login{position:fixed;inset:0;z-index:80;background:linear-gradient(#20343f,#16202a);
+     display:flex;align-items:center;justify-content:center;padding:16px}
+  .login[hidden]{display:none}
+  .loginbox{background:#f4f6f9;border-radius:10px;width:420px;max-width:100%;
+     padding:26px;box-shadow:0 24px 70px rgba(0,0,0,.5)}
+  .loginbrand{font:800 26px system-ui;letter-spacing:3px;text-align:center;color:#16202a}
+  .loginver{text-align:center;font:400 12px system-ui;color:var(--muted);padding-top:4px}
+  .loginsub{text-align:center;color:#4a5b6b;font-size:15px;padding:14px 0 16px}
+  .cashiers{display:grid;gap:10px}
+  .cashiers button{padding:24px 8px;font:700 22px system-ui;letter-spacing:1px;
+     border:0;border-radius:6px;background:#1fbfbe;color:#fff;cursor:pointer}
+  .loginmsg{min-height:22px;text-align:center;color:#c0392b;font-weight:600;font-size:14px}
+  .linkbtn{display:block;margin:8px auto 0;background:none;border:0;cursor:pointer;
+     color:#4a5b6b;font:600 14px system-ui;padding:8px}
+  /* ---------- end of day ---------- */
+  .dayfoot{display:flex;align-items:center;gap:16px;padding:14px;flex-wrap:wrap}
+  .dayinfo{font-size:15px;line-height:1.9}
+  .finish{margin-left:auto;padding:20px 26px;border:0;border-radius:6px;cursor:pointer;
+     background:var(--red);color:#fff;font:700 16px system-ui;letter-spacing:.5px}
+  /* ---------- deletion mode ---------- */
+  .delonly{display:none}
+  .delmode .delonly{display:table-cell}
+  .delmode .selbar{display:flex}
+  .selbar{display:none;align-items:center;gap:8px;padding:12px 14px;
+     background:#fdeaee;border-top:1px solid var(--line);flex-wrap:wrap}
+  .selbar button{padding:11px 16px;border:1px solid var(--line);background:#fff;
+     border-radius:6px;font:600 13px system-ui;cursor:pointer}
+  .selcount{font:700 15px system-ui;margin-right:auto}
+  .bigblue{background:var(--accent);border:1px solid var(--accent);color:#fff;
+     padding:16px 26px;border-radius:6px;font:700 15px system-ui;
+     letter-spacing:.5px;cursor:pointer}
+  .bigred{background:var(--red);border:1px solid var(--red);color:#fff;
+     padding:16px 26px;border-radius:6px;font:700 15px system-ui;
+     letter-spacing:.5px;cursor:pointer}
+  /* Shown after the server has been told to stop, when there is nothing left
+     to talk to.  The launcher closes the browser a moment later; this is what
+     the owner sees if she stopped the till some other way. */
+  .bye{display:flex;align-items:center;justify-content:center;height:100vh;
+     background:#16202a;color:#fff;font:600 26px/1.6 system-ui;text-align:center;
+     padding:24px}
+  .selbar .godelete{background:var(--red);border-color:var(--red);color:#fff}
+  .selbar .godelete:disabled{opacity:.4;cursor:not-allowed}
+  #s-delmode.on{background:var(--red);border-color:var(--red);color:#fff}
+  th.pick, td.pick{width:52px;text-align:center}
+  td.pick input{width:22px;height:22px}
+  .delmode #stock tr{cursor:pointer}
+  .delmode #stock tr.picked{background:#fdeaee}
+  .samples{max-height:230px;overflow:auto;margin-top:10px;border:1px solid var(--line);
+     border-radius:6px;padding:10px 12px;background:#fbfcfd}
+  .samples h4{margin:8px 0 4px;font:700 12px system-ui;color:var(--muted);letter-spacing:.4px}
+  .samples div{font-size:13px;padding:2px 0;color:#3a4a5a}
+  .bigwarn{text-align:center;font:800 26px system-ui;padding:22px 8px;color:#a02138}
+  .payfoot .danger2{background:var(--red);color:#fff}
+  /* 44px tall and 90px wide is the smallest a finger hits reliably on the
+     shop's touchscreen, and these buttons print and cancel real receipts. */
+  .rowbtn{min-height:44px;min-width:90px;padding:8px 14px;
+     border:1px solid var(--line);background:#fbfcfd;
+     border-radius:5px;font:600 13px system-ui;cursor:pointer;white-space:nowrap}
+  .rowbtn:hover{background:#f0f4f7}
+  .rowbtn.danger{border-color:var(--red);color:var(--red)}
+  .rowbtn.arm{background:var(--red);border-color:var(--red);color:#fff}
+  .hintcell{color:var(--muted)}
+  table.sum{width:100%;border-collapse:collapse;font-size:16px}
+  table.sum td{padding:9px 4px;border-bottom:1px solid #dce3ea}
+  table.sum td:last-child{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+  table.sum tr.big td{font-size:21px;padding:13px 4px}
+  .printrow{display:flex;align-items:center;gap:12px;padding:16px 2px 4px;font-size:15px}
+  .toggle{margin-left:auto;padding:14px 26px;border:2px solid #c3ced9;border-radius:6px;
+     background:#fff;font:700 16px system-ui;cursor:pointer;color:#6b7a88}
+  .toggle.on{background:#1fbfbe;border-color:#1fbfbe;color:#fff}
+  .payfoot.two{grid-template-columns:1fr 1fr}
+  /* ---------- extras menu ---------- */
+  .menu{display:grid;gap:12px;padding-bottom:6px}
+  .menu button{display:block;width:100%;text-align:left;padding:18px 20px;
+     border:1px solid #c3ced9;border-radius:6px;background:#fff;cursor:pointer;
+     font:700 17px system-ui;letter-spacing:.4px;color:var(--ink)}
+  .menu button span{display:block;font:400 14px system-ui;color:var(--muted);
+     letter-spacing:0;padding-top:4px}
+  .menu button:hover{background:#f0f4f7}
+  .menu button:disabled{opacity:.45;cursor:not-allowed}
+  .menu button.danger{border-color:var(--red);color:var(--red)}
+  .menu button.danger span{color:#c98a95}
+  tr.voided td{color:var(--muted);text-decoration:line-through}
+  tr.voided td.act{text-decoration:none}
+  .vmark{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;
+     font-weight:700;background:var(--red);color:#fff;text-decoration:none}
+  /* ---------- shared number pad ---------- */
+  .numbox{background:#f4f6f9;border-radius:6px;width:430px;max-width:100%;
+     padding:22px;box-shadow:0 18px 60px rgba(0,0,0,.4)}
+  .numtitle{font:600 15px system-ui;color:#4a5b6b;letter-spacing:.4px;
+     text-align:center;padding-bottom:12px}
+  #n-input{width:100%;padding:16px;border:2px solid #2f9ee0;border-radius:4px;
+     background:#fff;outline:none;text-align:center;
+     font:700 30px system-ui;font-variant-numeric:tabular-nums;color:#16202a}
+  .numgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}
+  .numgrid button{padding:20px 4px;font:600 26px system-ui;color:#2b3947;
+     border:1px solid #c3ced9;border-radius:5px;cursor:pointer;
+     background:linear-gradient(#f6f9fc,#dde5ee)}
+  .numgrid button:active{background:#c9d5e1}
+  .numgrid button.wide{grid-column:span 2}
+  .numgrid button.act{font-size:17px;font-weight:700;color:#fff;border:0}
+  .numgrid button.del{background:#3d4a57}
+  .numgrid button.cancel{background:#c9646f}
+  .numgrid button.ok{background:#1fbfbe}
+  .numgrid button:disabled{opacity:.45;cursor:not-allowed}
+  .pindots{display:flex;justify-content:center;gap:14px;margin:4px 0 18px}
+  .pindots span{width:22px;height:22px;border-radius:50%;border:2px solid var(--line)}
+  .pindots span.f{background:var(--accent);border-color:var(--accent)}
+  form.grid.big-form input{padding:16px;font-size:22px}
+  form.grid.big-form label{font-size:14px}
+  /* ---------- on-screen keyboard ---------- */
+  /* Docked at the bottom and given real height in the layout: body and any
+     open dialog get padded by exactly the keyboard's height, so it never
+     covers the field being typed into or the button underneath it. */
+  .kbd{position:fixed;left:0;right:0;bottom:0;z-index:90;display:none;
+     background:#dfe5ec;border-top:1px solid #b9c5d2;padding:8px;
+     box-shadow:0 -8px 26px rgba(0,0,0,.18)}
+  body.kbd-open .kbd{display:block}
+  body.kbd-open{padding-bottom:var(--kbd-h,300px)}
+  body.kbd-open .modal{padding-bottom:var(--kbd-h,300px)}
+  body.kbd-open .paybox,body.kbd-open .numbox{max-height:calc(96vh - var(--kbd-h,300px))}
+  .krow{display:flex;gap:6px;margin-bottom:6px}
+  .krow:last-child{margin-bottom:0}
+  .kbd button{flex:1;min-width:0;padding:13px 2px;font:600 19px system-ui;color:#2b3947;
+     border:1px solid #c3ced9;border-radius:5px;cursor:pointer;
+     background:linear-gradient(#fbfdff,#e4eaf1)}
+  .kbd button:active{background:#c9d5e1}
+  .kbd button.mod{background:#cbd6e1;font:700 13px system-ui}
+  .kbd button.mod.on{background:#2f9ee0;border-color:#2f9ee0;color:#fff}
+  .kbd button.done{background:#1fbfbe;border-color:#1fbfbe;color:#fff;font:700 13px system-ui}
+  .kbd button.wide{flex:1.6}
+  .kbd button.space{flex:6}
+  /* Digits stay a compact block in the middle instead of stretching to
+     screen width -- a 300px-wide "5" key is harder to hit, not easier. */
+  .numdock{max-width:520px;margin:0 auto}
+  .numdock button{padding:16px 2px;font-size:23px}
+  .numdock button.mod,.numdock button.done{font-size:14px}
+  #scan-kbd{flex:none;padding:0 22px;font:700 15px system-ui;border:1px solid var(--line);
+     background:#eef2f6;border-radius:6px;cursor:pointer}
+  h3{margin:0;padding:12px 14px;border-bottom:1px solid var(--line);font-size:13px;letter-spacing:.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">TAU</span>
+  <span class="meta" id="ver" title="версия программы"></span>
+  <span class="meta" id="clock"></span>
+  <span class="meta">Кассир: <b id="cashier">Акмарал</b></span>
+  <nav>
+    <button data-tab="sale" class="on">ПРОДАЖА</button>
+    <button data-tab="receive">ПРИЁМКА</button>
+    <button data-tab="day">ДЕНЬ</button>
+    <button data-tab="admin" id="nav-admin" hidden>АДМИН</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ================= SALE ================= -->
+  <section id="tab-sale">
+    <div class="search">
+      <input id="scan" placeholder="Сканируйте штрихкод или введите название" autocomplete="off">
+      <button id="scan-kbd" type="button" title="Экранная клавиатура">АБВ</button>
+    </div>
+    <div id="results"></div>
+    <div class="panel cart">
+      <table>
+        <thead><tr>
+          <th style="width:36px">#</th><th>НАИМЕНОВАНИЕ</th>
+          <th class="num" style="width:110px">ЦЕНА</th>
+          <th class="num" style="width:90px">КОЛ-ВО</th>
+          <th class="num" style="width:110px">СКИДКА</th>
+          <th class="num" style="width:120px">СУММА</th>
+        </tr></thead>
+        <tbody id="cart"></tbody>
+      </table>
+      <div class="hint" id="cart-empty">Корзина пуста. Отсканируйте товар</div>
+    </div>
+    <div class="foot">
+      <div class="total">
+        <div class="row"><span>ПОЗИЦИЙ</span><span id="count">0</span></div>
+        <div class="row" style="align-items:baseline;margin-top:6px">
+          <span>ИТОГО</span><span class="big" id="total">0.00</span>
+        </div>
+      </div>
+      <div class="keys">
+        <button id="qty-minus">− КОЛ-ВО</button>
+        <button id="qty-set">КОЛ-ВО</button>
+        <button id="qty-plus">+ КОЛ-ВО</button>
+        <button id="universal">УНИВЕРСАЛЬНЫЙ<br>ПРОДУКТ</button>
+        <button id="newitem">НОВЫЙ<br>ТОВАР</button>
+        <button id="discount">СКИДКА</button>
+        <button id="extras">ДОП.<br>ФУНКЦИИ</button>
+        <button id="clear">ОЧИСТИТЬ</button>
+        <button class="del1" id="remove">УДАЛИТЬ</button>
+        <button class="pay" id="pay">ОПЛАТА</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= RECEIVE ================= -->
+  <section id="tab-receive" hidden>
+    <div class="panel">
+      <h3>ПРИЁМКА ТОВАРА ПО НАКЛАДНОЙ</h3>
+      <form class="grid" id="recv">
+        <label>Штрихкод
+          <span class="codeline">
+            <input name="barcode" id="r-barcode" autocomplete="off">
+            <button type="button" id="r-addcode" title="Ещё штрихкод на этот же товар">+</button>
+          </span>
+        </label>
+        <label>Наименование<input name="name" id="r-name" autocomplete="off" data-kbd></label>
+        <label>Количество<input name="qty" id="r-qty" inputmode="decimal"
+               autocomplete="off" required data-num></label>
+        <label>Закуп. цена<input name="cost" inputmode="decimal"
+               autocomplete="off" data-num></label>
+        <label>Цена продажи<input name="price" inputmode="decimal"
+               autocomplete="off" data-num></label>
+        <label>Мин. остаток<input name="min_stock" inputmode="decimal"
+               autocomplete="off" data-num></label>
+        <label>Накладная<input name="invoice" id="r-invoice" autocomplete="off" data-kbd></label>
+        <div class="extracodes" id="r-extra"></div>
+        <div class="actions">
+          <button class="primary" type="submit">ПРИНЯТЬ НА СКЛАД</button>
+          <span class="hint" id="r-status" style="padding:8px"></span>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ================= ADMIN ================= -->
+  <section id="tab-admin" hidden>
+    <div class="panel" style="margin-bottom:12px">
+      <h3>ИНВЕНТАРИЗАЦИЯ: СКОЛЬКО ЛЕЖИТ НА ПОЛКЕ</h3>
+      <form class="grid" id="cnt">
+        <label>Штрихкод<input name="barcode" id="c-barcode" autocomplete="off"></label>
+        <label>Посчитано, шт<input name="qty" id="c-qty" inputmode="decimal"
+               autocomplete="off" required data-num></label>
+        <div class="actions">
+          <button class="primary" type="submit">ЗАПИСАТЬ ОСТАТОК</button>
+          <span class="hint" id="c-status" style="padding:8px"></span>
+        </div>
+      </form>
+    </div>
+    <div class="panel" style="margin-bottom:12px">
+      <h3>КАССИРЫ</h3>
+      <form class="grid" id="cash-add">
+        <label>Имя кассира<input name="name" id="ca-name" autocomplete="off" data-kbd></label>
+        <label>Код (4 цифры)<input name="pin" id="ca-pin" maxlength="4" readonly
+               placeholder="нажмите, чтобы ввести" autocomplete="off"></label>
+        <div class="actions">
+          <button class="primary" type="submit">ДОБАВИТЬ КАССИРА</button>
+          <span class="hint" id="ca-status" style="padding:8px"></span>
+        </div>
+      </form>
+      <table>
+        <thead><tr><th>ИМЯ</th><th>РОЛЬ</th><th class="num">КОД</th>
+          <th class="num">УДАЛИТЬ</th></tr></thead>
+        <tbody id="cashiers"></tbody>
+      </table>
+    </div>
+    <div class="panel" id="stockpanel">
+      <h3>ОСТАТКИ</h3>
+      <div class="actions">
+        <input id="s-find" placeholder="Поиск по названию или штрихкоду"
+               autocomplete="off" style="flex:1" data-kbd>
+        <button id="s-uncounted" type="button">ТОЛЬКО НЕ ПОСЧИТАННЫЕ</button>
+        <button id="s-nocost" type="button">БЕЗ ЗАКУП. ЦЕНЫ</button>
+        <button id="s-delmode" type="button">РЕЖИМ УДАЛЕНИЯ</button>
+        <button id="lock" type="button">ВЫЙТИ</button>
+      </div>
+
+      <!-- selection bar, only in deletion mode -->
+      <div class="selbar delonly">
+        <span class="selcount" id="s-selcount">Выбрано: 0</span>
+        <button id="s-all" type="button">ВЫБРАТЬ ВСЁ НАЙДЕННОЕ</button>
+        <button id="s-none" type="button">СНЯТЬ ВЫДЕЛЕНИЕ</button>
+        <button id="s-delete" class="godelete" type="button" disabled>УДАЛИТЬ ВЫБРАННОЕ</button>
+      </div>
+
+      <div class="hint" id="s-info"></div>
+      <table>
+        <thead><tr><th class="delonly pick"></th>
+          <th>НАИМЕНОВАНИЕ</th><th>ШТРИХКОД</th>
+          <th class="num">ЗАКУП.</th>
+          <th class="num">ЦЕНА</th><th class="num">ОСТАТОК</th></tr></thead>
+        <tbody id="stock"></tbody>
+      </table>
+    </div>
+
+    <!-- The till runs full screen on a machine with no keyboard, so this is
+         the only way out of the browser.  It sits at the very bottom of the
+         owner's own page on purpose: reaching it takes a deliberate scroll. -->
+    <div class="panel">
+      <h3>ОБНОВЛЕНИЕ ПРОГРАММЫ</h3>
+      <div class="note" style="text-align:left;padding:10px 14px 0" id="upd-note">
+        Касса скачает новую версию, проверит её и перезапустится сама.
+        Товары, остатки и история продаж не меняются.
+      </div>
+      <div style="padding:12px 14px 16px">
+        <button id="update" class="bigblue" type="button">ОБНОВИТЬ КАССУ</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>ЗАВЕРШЕНИЕ РАБОТЫ</h3>
+      <div class="note" style="text-align:left;padding:10px 14px 0">
+        Касса закроется полностью. Чтобы включить её снова, нажмите значок
+        <b>КАССА</b> на рабочем столе.
+      </div>
+      <div style="padding:12px 14px 16px">
+        <button id="quit" class="bigred" type="button">ВЫКЛЮЧИТЬ КАССУ</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= DAY ================= -->
+  <section id="tab-day" hidden>
+    <div class="cards">
+      <div class="card"><div class="k">ВЫРУЧКА</div><div class="v" id="d-rev">0</div></div>
+      <div class="card"><div class="k">ЧЕКОВ</div><div class="v" id="d-cnt">0</div></div>
+      <div class="card"><div class="k">ПРИБЫЛЬ</div><div class="v" id="d-prof">0</div></div>
+      <div class="card"><div class="k">НАЛИЧНЫХ В КАССЕ</div><div class="v" id="d-cash">0</div></div>
+      <div class="card"><div class="k">ПО КАРТЕ</div><div class="v" id="d-card">0</div></div>
+      <div class="card"><div class="k">СКИДКИ</div><div class="v" id="d-disc">0</div></div>
+      <div class="card"><div class="k">СРЕДНИЙ ЧЕК</div><div class="v" id="d-avg">0</div></div>
+    </div>
+    <div class="panel" style="margin-bottom:12px">
+      <h3>ПО СПОСОБУ ОПЛАТЫ</h3>
+      <table><tbody id="d-pay"></tbody></table>
+    </div>
+    <div class="panel" style="margin-bottom:12px">
+      <h3>ТОП ТОВАРОВ ЗА ДЕНЬ</h3>
+      <table>
+        <thead><tr><th>НАИМЕНОВАНИЕ</th><th class="num">КОЛ-ВО</th><th class="num">СУММА</th></tr></thead>
+        <tbody id="d-top"></tbody>
+      </table>
+    </div>
+    <div class="panel" style="margin-bottom:12px">
+      <h3>ЧЕКИ ЗА ДЕНЬ</h3>
+      <table>
+        <thead><tr><th style="width:70px">ЧЕК</th><th style="width:70px">ВРЕМЯ</th>
+          <th>ТОВАРЫ</th><th class="num" style="width:110px">СУММА</th>
+          <th class="num" style="width:210px">ДЕЙСТВИЯ</th></tr></thead>
+        <tbody id="d-receipts"></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h3>ОПЕРАЦИОННЫЙ ДЕНЬ</h3>
+      <div class="dayfoot">
+        <div class="dayinfo">
+          <div>Кассир: <b id="d-cashier">не определён</b></div>
+          <div>Открыт: <b id="d-opened">нет данных</b></div>
+        </div>
+        <button class="finish" id="d-finish">ЗАВЕРШИТЬ ОПЕРАЦИОННЫЙ ДЕНЬ</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ================= PAYMENT ================= -->
+<div class="modal" id="paymodal" hidden>
+  <div class="paybox">
+    <div class="payhead">
+      <div class="prow"><span class="k">К ОПЛАТЕ:</span><span class="v" id="p-total">0.00 тг</span></div>
+      <div class="prow got"><span class="k">ПОЛУЧЕНО:</span><span class="v" id="p-got">0.00 тг</span></div>
+      <div class="prow chg"><span class="k">СДАЧА:</span><span class="v" id="p-change">0.00 тг</span></div>
+    </div>
+
+    <div class="paytabs">
+      <button data-kind="cash" class="on">НАЛИЧНАЯ</button>
+      <button data-kind="card">БЕЗНАЛИЧНАЯ</button>
+      <button data-kind="mixed">СМЕШАННАЯ</button>
+    </div>
+
+    <div class="paybody">
+      <div class="payfields">
+        <div class="field" id="f-cash">
+          <svg width="26" height="18" viewBox="0 0 26 18" fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="1" y="1" width="24" height="16" rx="2.5"/>
+            <circle cx="13" cy="9" r="3.6"/>
+          </svg>
+          <input id="p-cash" inputmode="decimal" value="0" autocomplete="off">
+        </div>
+        <div class="field" id="f-card">
+          <svg width="26" height="18" viewBox="0 0 26 18" fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="1" y="1" width="24" height="16" rx="2.5"/>
+            <path d="M1 6h24"/>
+          </svg>
+          <input id="p-card" inputmode="decimal" value="0" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="pad" id="p-pad"></div>
+      <div class="paymsg" id="p-msg"></div>
+    </div>
+
+    <div class="payfoot">
+      <button class="cancel" id="p-cancel">ОТМЕНА</button>
+      <button class="exact" id="p-exact">БЕЗ СДАЧИ</button>
+      <button class="confirm" id="p-confirm">ОПЛАТА</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= CASHIER LOGIN ================= -->
+<!-- Covers everything: with no operational day open there is no till to use. -->
+<div class="login" id="login" hidden>
+  <div class="loginbox">
+    <div class="loginbrand">TAU</div>
+    <div class="loginver" id="login-ver"></div>
+
+    <div id="l-who-step">
+      <div class="loginsub">Выберите кассира</div>
+      <div class="cashiers" id="l-cashiers"></div>
+    </div>
+
+    <div id="l-pin-step" hidden>
+      <div class="loginsub">Код доступа для <b id="l-name"></b></div>
+      <div class="pindots" id="l-dots"></div>
+      <div class="pad" id="l-pad"></div>
+      <div class="loginmsg" id="l-msg"></div>
+      <button class="linkbtn" id="l-back">← ДРУГОЙ КАССИР</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= DISCOUNT ================= -->
+<div class="modal" id="discmodal" hidden>
+  <div class="paybox" style="width:min(480px,100%)">
+    <div class="payhead">
+      <div class="prow"><span class="k">СКИДКА</span><span class="v" id="dc-what"></span></div>
+      <div class="prow"><span class="k">СУММА:</span><span class="v" id="dc-base"></span></div>
+      <div class="prow got"><span class="k">К ОПЛАТЕ:</span><span class="v" id="dc-net"></span></div>
+    </div>
+
+    <div class="paytabs">
+      <button data-scope="line" class="on">НА ТОВАР</button>
+      <button data-scope="cart">НА ВЕСЬ ЧЕК</button>
+    </div>
+
+    <div class="paybody">
+      <div class="payfields">
+        <div class="field sel" id="dc-f-pct">
+          <svg width="26" height="18" viewBox="0 0 26 18" fill="none" stroke="currentColor" stroke-width="1.6">
+            <circle cx="7" cy="6" r="3"/><circle cx="19" cy="13" r="3"/><path d="M5 15L21 4"/>
+          </svg>
+          <input id="dc-pct" inputmode="decimal" value="0" autocomplete="off">
+          <span class="suffix">%</span>
+        </div>
+        <div class="field" id="dc-f-sum">
+          <svg width="26" height="18" viewBox="0 0 26 18" fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="1" y="1" width="24" height="16" rx="2.5"/><circle cx="13" cy="9" r="3.6"/>
+          </svg>
+          <input id="dc-sum" inputmode="decimal" value="0" autocomplete="off">
+          <span class="suffix">тг</span>
+        </div>
+      </div>
+      <div class="pad" id="dc-pad"></div>
+      <div class="paymsg" id="dc-msg"></div>
+    </div>
+
+    <div class="payfoot">
+      <button class="cancel" id="dc-cancel">ОТМЕНА</button>
+      <button class="exact" id="dc-clear">УБРАТЬ</button>
+      <button class="confirm" id="dc-ok">ПРИМЕНИТЬ</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= NEW PRODUCT (quick receive) ================= -->
+<div class="modal" id="quickmodal" hidden>
+  <div class="paybox" style="width:min(520px,100%)">
+    <div class="payhead">
+      <div class="prow"><span class="k">НОВЫЙ ТОВАР</span><span class="v"></span></div>
+    </div>
+    <div class="paybody">
+      <div class="note" id="k-hint" style="padding:4px 0 12px"></div>
+      <form class="grid big-form" id="quick" style="padding:0">
+        <label>Штрихкод<input name="barcode" id="k-barcode" autocomplete="off"
+               placeholder="сканируйте" required></label>
+        <label>Наименование<input name="name" id="k-name" autocomplete="off" required data-kbd></label>
+        <label>Цена продажи, тг<input name="price" id="k-price"
+               inputmode="decimal" autocomplete="off" required data-num></label>
+      </form>
+      <div class="loginmsg" id="k-status"></div>
+      <div class="note" style="padding:2px 0 0">
+        Товар запомнится в базе, дальше его можно просто сканировать.
+        Количество не спрашиваем: остаток появится после инвентаризации.
+      </div>
+    </div>
+    <div class="payfoot two">
+      <button class="cancel" id="k-cancel">ОТМЕНА</button>
+      <button class="confirm" id="k-save">СОХРАНИТЬ И В ЧЕК</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= BATCH DELETE ================= -->
+<div class="modal" id="delmodal" hidden>
+  <div class="paybox" style="width:min(620px,100%)">
+    <!-- step 1: what is about to happen -->
+    <div id="del-step1">
+      <div class="payhead">
+        <div class="prow"><span class="k">УДАЛЕНИЕ ТОВАРОВ</span><span class="v" id="del-count"></span></div>
+      </div>
+      <div class="paybody">
+        <table class="sum" id="del-split"></table>
+        <div class="samples" id="del-samples"></div>
+      </div>
+      <div class="payfoot two">
+        <button class="cancel" id="del-cancel">ОТМЕНА</button>
+        <button class="confirm" id="del-next">ДАЛЬШЕ</button>
+      </div>
+    </div>
+
+    <!-- step 2: last chance -->
+    <div id="del-step2" hidden>
+      <div class="payhead">
+        <div class="prow"><span class="k">ПОДТВЕРДИТЕ</span><span class="v"></span></div>
+      </div>
+      <div class="paybody">
+        <div class="bigwarn" id="del-warn"></div>
+        <div class="note">Это действие нельзя отменить.<br>
+          Товары с историей продаж будут скрыты, а не стёрты: чеки сохранятся.</div>
+      </div>
+      <div class="payfoot two">
+        <button class="cancel" id="del-back">НАЗАД</button>
+        <button class="danger2" id="del-go">УДАЛИТЬ</button>
+      </div>
+    </div>
+
+    <!-- step 3: done -->
+    <div id="del-step3" hidden>
+      <div class="payhead">
+        <div class="prow"><span class="k">ГОТОВО</span><span class="v"></span></div>
+      </div>
+      <div class="paybody"><table class="sum" id="del-result"></table></div>
+      <div class="payfoot"><button class="confirm" id="del-close">ЗАКРЫТЬ</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= SET A CASHIER'S CODE ================= -->
+<div class="modal" id="setpin" hidden>
+  <div class="paybox" style="width:min(400px,100%)">
+    <div class="payhead">
+      <div class="prow"><span class="k">НОВЫЙ КОД</span><span class="v" id="sp-who"></span></div>
+    </div>
+    <div class="paybody">
+      <div class="note" style="padding:6px 0 14px">Введите четыре цифры</div>
+      <div class="pindots" id="sp-dots"></div>
+      <div class="pad" id="sp-pad"></div>
+      <div class="loginmsg" id="sp-msg"></div>
+    </div>
+    <div class="payfoot two">
+      <button class="cancel" id="sp-cancel">ОТМЕНА</button>
+      <button class="confirm" id="sp-ok">СОХРАНИТЬ</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= EXTRAS MENU ================= -->
+<div class="modal" id="extrasmodal" hidden>
+  <div class="paybox" style="width:480px">
+    <div class="payhead">
+      <div class="prow"><span class="k">ДОП. ФУНКЦИИ</span><span class="v"></span></div>
+    </div>
+    <div class="paybody">
+      <div class="menu">
+        <button id="x-print">ПЕЧАТЬ ПОСЛЕДНЕГО ЧЕКА
+          <span id="x-last"></span></button>
+        <button id="x-void" class="danger">ОТМЕНА ПОСЛЕДНЕГО ЧЕКА
+          <span id="x-last2"></span></button>
+        <button id="x-list">ВСЕ ЧЕКИ ЗА ДЕНЬ
+          <span>печать и отмена любого чека</span></button>
+      </div>
+    </div>
+    <div class="payfoot" style="grid-template-columns:1fr">
+      <button class="cancel" id="x-close">ЗАКРЫТЬ</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= VOID A RECEIPT ================= -->
+<div class="modal" id="voidmodal" hidden>
+  <div class="paybox">
+    <!-- step 1: what exactly is being cancelled -->
+    <div id="v-confirm">
+      <div class="payhead">
+        <div class="prow"><span class="k">ОТМЕНИТЬ ЧЕК?</span>
+          <span class="v" id="v-number"></span></div>
+      </div>
+      <div class="paybody">
+        <table class="sum" id="v-lines"></table>
+        <div class="note">Товар вернётся на склад,<br>
+          чек перестанет считаться в выручке дня.</div>
+        <div class="printrow">
+          <span>Напечатать чек отмены</span>
+          <button id="v-print-toggle" class="toggle">НЕТ</button>
+        </div>
+      </div>
+      <div class="payfoot two">
+        <button class="cancel" id="v-cancel">НЕТ, ОСТАВИТЬ</button>
+        <button class="danger2" id="v-do">ОТМЕНИТЬ ЧЕК</button>
+      </div>
+    </div>
+    <!-- step 2: last word -->
+    <div id="v-sure" hidden>
+      <div class="payhead">
+        <div class="prow"><span class="k">ТОЧНО?</span>
+          <span class="v" id="v-sum"></span></div>
+      </div>
+      <div class="paybody">
+        <div class="bigwarn" id="v-sure-text"></div>
+        <div class="note">Это действие нельзя отменить.</div>
+      </div>
+      <div class="payfoot two">
+        <button class="cancel" id="v-back">НАЗАД</button>
+        <button class="danger2" id="v-really">ДА, ОТМЕНИТЬ</button>
+      </div>
+    </div>
+    <!-- step 3: done -->
+    <div id="v-done" hidden>
+      <div class="payhead">
+        <div class="prow"><span class="k">ЧЕК ОТМЕНЁН</span>
+          <span class="v" id="v-done-num"></span></div>
+      </div>
+      <div class="paybody">
+        <div class="note" id="v-done-note"></div>
+      </div>
+      <div class="payfoot" style="grid-template-columns:1fr">
+        <button class="confirm" id="v-ok">ХОРОШО</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= UPDATE ================= -->
+<div class="modal" id="updmodal" hidden>
+  <div class="paybox" style="width:520px">
+    <div class="bigwarn" style="color:#0b6d84">ОБНОВИТЬ КАССУ?</div>
+    <div class="paybody">
+      <div class="note">Касса ненадолго закроется и откроется снова.<br>
+        Товары, остатки и история продаж останутся на месте.<br>
+        Если новая версия не заработает,<br>
+        касса сама вернёт прежнюю.</div>
+    </div>
+    <div class="payfoot two">
+      <button class="exact" id="u-cancel">НЕТ, ПОТОМ</button>
+      <button class="confirm" id="u-yes">ДА, ОБНОВИТЬ</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= SHUTDOWN ================= -->
+<div class="modal" id="quitmodal" hidden>
+  <div class="paybox" style="width:520px">
+    <div class="bigwarn">ВЫКЛЮЧИТЬ КАССУ?</div>
+    <div class="paybody">
+      <div class="note">Продажи прекратятся.<br>
+        Открытый день не пропадёт: он продолжится,<br>
+        когда кассу включат снова.</div>
+    </div>
+    <div class="payfoot two">
+      <button class="exact" id="q-cancel">НЕТ, ОСТАТЬСЯ</button>
+      <button class="danger2" id="q-yes">ДА, ВЫКЛЮЧИТЬ</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= END OF DAY ================= -->
+<div class="modal" id="closemodal" hidden>
+  <div class="paybox">
+    <!-- step 1: confirm -->
+    <div id="c-confirm">
+      <div class="payhead">
+        <div class="prow"><span class="k">ЗАВЕРШИТЬ ДЕНЬ?</span><span class="v"></span></div>
+      </div>
+      <div class="paybody">
+        <table class="sum" id="c-preview"></table>
+        <div class="note" id="c-warn"></div>
+        <div class="printrow">
+          <span>Напечатать отчёт на чековой ленте</span>
+          <button id="c-print-toggle" class="toggle">НЕТ</button>
+        </div>
+      </div>
+      <div class="payfoot two">
+        <button class="cancel" id="c-cancel">ОТМЕНА</button>
+        <button class="confirm" id="c-do">ЗАВЕРШИТЬ ДЕНЬ</button>
+      </div>
+    </div>
+
+    <!-- step 2: the day is closed -->
+    <div id="c-done" hidden>
+      <div class="payhead">
+        <div class="prow"><span class="k">ДЕНЬ ЗАВЕРШЁН</span><span class="v"></span></div>
+      </div>
+      <div class="paybody">
+        <table class="sum" id="c-result"></table>
+        <div class="note" id="c-printed"></div>
+        <div class="note" id="c-backup" style="padding:0 8px 14px"></div>
+      </div>
+      <div class="payfoot two">
+        <button class="exact" id="c-reprint">ПЕЧАТАТЬ ОТЧЁТ</button>
+        <button class="confirm" id="c-exit">ВЫЙТИ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SHARED NUMBER PAD (КОЛ-ВО, УНИВЕРСАЛЬНЫЙ ТОВАР) ============ -->
+<div class="modal" id="numpad" hidden>
+  <div class="numbox">
+    <div class="numtitle" id="n-title"></div>
+    <input id="n-input" inputmode="decimal" value="0" autocomplete="off">
+    <div class="numgrid" id="n-pad"></div>
+  </div>
+</div>
+
+<div class="kbd" id="kbd"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const money = v => Number(v).toFixed(2);
+// stock === null means the goods were imported but never physically counted.
+// Show that plainly instead of a number nobody should trust.
+const counted = v => v !== null && v !== undefined;
+const stockText = v => counted(v) ? String(v) : 'не посчитан';
+let cart = [], sel = -1;
+
+// ---------- on-screen keypad typing ----------
+// Typing must respect the selection.  Every pad opens with its value selected,
+// so the first key REPLACES what is there ("0.00" then 5 gives 5, not 0.005);
+// once the caret collapses, later keys append as normal.
+function caret(el) {
+  const v = String(el.value);
+  let s = el.selectionStart, e = el.selectionEnd;
+  if (s === null || e === null) s = e = v.length;
+  return [v, s, e];
+}
+
+function put(el, next, pos) {
+  if (!next) { next = '0'; pos = 1; }
+  el.value = next;
+  try { el.setSelectionRange(pos, pos); } catch (_) {}
+}
+
+function padType(el, ch) {
+  const [v, s, e] = caret(el);
+  const head = v.slice(0, s), tail = v.slice(e);
+  if (ch === '.' && (head + tail).includes('.')) return;
+  let next = head + ch + tail;
+  if (next[0] === '.') next = '0' + next;            // ".5" reads as "0.5"
+  // A lone leading zero is scaffolding, not a digit the cashier typed.
+  if (next.length > 1 && next[0] === '0' && next[1] !== '.')
+    next = next.replace(/^0+(?=\d)/, '');
+  put(el, next, next.length - tail.length);
+}
+
+function padBack(el) {
+  const [v, s, e] = caret(el);
+  if (e > s) put(el, v.slice(0, s) + v.slice(e), s);
+  else put(el, v.slice(0, Math.max(0, s - 1)) + v.slice(s), Math.max(0, s - 1));
+}
+
+function toast(msg, err) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.className = 'toast', 2600);
+}
+
+// ---------- tabs ----------
+const TABS = ['sale', 'receive', 'day', 'admin'];
+
+function showTab(name) {
+  closeKbd();
+  document.querySelectorAll('nav button').forEach(
+    x => x.classList.toggle('on', x.dataset.tab === name));
+  TABS.forEach(t => $('#tab-' + t).hidden = (t !== name));
+  if (name === 'admin') { loadStock(); loadCashiers(); }
+  if (name === 'day') loadDay();
+  if (name === 'sale') $('#scan').focus();
+  if (name === 'receive') $('#r-barcode').focus();
+}
+
+document.querySelectorAll('nav button').forEach(b =>
+  b.onclick = () => showTab(b.dataset.tab));
+
+// ---------- four-digit code entry ----------
+// Used by the cashier login and by setting a cashier's code.
+function makePin(padSel, dotsSel, msgSel, onFull, okSel) {
+  const st = {code: ''};
+  const draw = () => {
+    $(dotsSel).innerHTML = [0,1,2,3].map(i =>
+      `<span class="${i < st.code.length ? 'f' : ''}"></span>`).join('');
+    if (okSel) $(okSel).disabled = st.code.length < 4;
+  };
+  st.submit = () => { if (st.code.length === 4) onFull(st.code); };
+  $(padSel).innerHTML =
+    [1,2,3,4,5,6,7,8,9].map(d => `<button data-d="${d}">${d}</button>`).join('') +
+    `<button data-act="clear">С</button><button data-d="0">0</button>` +
+    `<button data-act="back">⌫</button>`;
+  st.key = ch => {
+    if (ch === 'back') st.code = st.code.slice(0, -1);
+    else if (ch === 'clear') st.code = '';
+    else if (/^[0-9]$/.test(ch) && st.code.length < 4) st.code += ch;
+    else return;
+    $(msgSel).textContent = '';
+    draw();
+    if (st.code.length === 4) onFull(st.code);   // four digits is the code
+  };
+  $(padSel).querySelectorAll('button').forEach(b => {
+    b.addEventListener('mousedown', e => e.preventDefault());
+    b.onclick = () => st.key(b.dataset.act || b.dataset.d);
+  });
+  st.reset = () => { st.code = ''; $(msgSel).textContent = ''; draw(); };
+  st.fail = m => { st.code = ''; draw(); $(msgSel).textContent = m; };
+  draw();
+  return st;
+}
+
+// ---------- admin access ----------
+// No second code: the owner already proved who she is when she opened the
+// day, and the АДМИН tab is not offered to anyone else.  The server still
+// checks every admin route against the open day, so this is a shortcut for
+// her, not a hole.
+$('#lock').onclick = () => showTab('sale');
+
+// ---------- обновление программы ----------
+// Кнопка ничего не скачивает сама.  Она просит сервер оставить записку и
+// выключиться, а качает, подменяет и откатывает тот, кто кассу запускал:
+// переписать файлы работающей программы Windows всё равно не даст.
+const closeUpd = () => { $('#updmodal').hidden = true; };
+$('#update').onclick = () => {
+  if (cart.length) {
+    return toast('Сначала завершите или очистите чек', true);
+  }
+  $('#updmodal').hidden = false;
+};
+$('#u-cancel').onclick = closeUpd;
+$('#u-yes').onclick = async () => {
+  $('#u-yes').disabled = true;
+  let res = {};
+  try { res = await adminPost('/api/update', {}); } catch (e) { /* уже ушёл */ }
+  if (!res.ok) {
+    $('#u-yes').disabled = false;
+    return toast(res.error || 'Не удалось начать обновление', true);
+  }
+  document.body.innerHTML = '<div class="bye">Касса обновляется.<br>'
+    + 'Это займёт меньше минуты.<br>Она откроется сама.</div>';
+};
+
+// ---------- выключение кассы ----------
+// Stopping the server is what actually ends the session: the launcher that
+// started it is watching, and closes the browser as soon as it stops.  The
+// farewell screen below is only ever seen when the till was started by hand.
+const closeQuit = () => { $('#quitmodal').hidden = true; };
+$('#quit').onclick = () => { $('#quitmodal').hidden = false; };
+$('#q-cancel').onclick = closeQuit;
+$('#q-yes').onclick = async () => {
+  $('#q-yes').disabled = true;
+  let res = {};
+  try { res = await adminPost('/api/quit', {}); } catch (e) { /* already gone */ }
+  if (!res.ok) {
+    $('#q-yes').disabled = false;
+    return toast('Не удалось выключить кассу', true);
+  }
+  document.body.innerHTML = '<div class="bye">Касса выключена.<br>'
+    + 'Чтобы включить её снова, нажмите<br>значок КАССА на рабочем столе.</div>';
+};
+
+async function postJSON(path, body) {
+  return (await fetch(path, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)
+  })).json();
+}
+
+/** POST to an admin-only endpoint.  A refusal means the day is no longer
+ *  hers -- closed in another tab, or taken over -- so go back to the login. */
+async function adminPost(path, body) {
+  const res = await postJSON(path, body);
+  if (res.locked) { toast('Смена закрыта. Войдите заново', true); showLogin(); }
+  return res;
+}
+
+setInterval(() => $('#clock').textContent =
+  new Date().toLocaleString('ru-RU', {hour:'2-digit', minute:'2-digit',
+    day:'2-digit', month:'2-digit', year:'numeric'}), 500);
+
+// ---------- cart ----------
+// Invariant: while the cart has items, exactly one row is selected -- otherwise
+// the КОЛ-ВО and УДАЛИТЬ buttons would silently do nothing.
+function clampSel() {
+  if (!cart.length) sel = -1;
+  else if (sel < 0) sel = 0;
+  else if (sel >= cart.length) sel = cart.length - 1;
+}
+
+// A line's money, all derived from the percentage -- the percentage is what is
+// stored, so changing the quantity keeps the discount proportional.
+const gross = it => round2(it.qty * it.price);
+const lineDiscount = it => round2(gross(it) * (it.disc || 0) / 100);
+const net = it => round2(gross(it) - lineDiscount(it));
+const cartGross = () => round2(cart.reduce((s, i) => s + gross(i), 0));
+const cartNet = () => round2(cart.reduce((s, i) => s + net(i), 0));
+const cartDiscount = () => round2(cartGross() - cartNet());
+
+function render() {
+  clampSel();
+  const tb = $('#cart');
+  tb.innerHTML = cart.map((it, i) => `
+    <tr class="${i === sel ? 'sel' : ''}" data-i="${i}">
+      <td>${i + 1}</td><td>${it.name}</td>
+      <td class="num">${money(it.price)} тг</td>
+      <td class="num">${it.qty} ${it.unit}</td>
+      <td class="num disc ${it.disc ? 'has' : ''}" data-disc="${i}"
+          ><b>${money(it.disc || 0)} %</b></td>
+      <td class="num">${it.disc
+        ? `<span class="strike">${money(gross(it))}</span><br>${money(net(it))} тг`
+        : `${money(gross(it))} тг`}</td>
+    </tr>`).join('');
+  tb.querySelectorAll('tr').forEach(tr =>
+    tr.onclick = () => { sel = +tr.dataset.i; render(); });
+  // Tapping the скидка cell goes straight to that line's discount.
+  tb.querySelectorAll('td.disc').forEach(td => td.onclick = e => {
+    e.stopPropagation();
+    sel = +td.dataset.disc;
+    render();
+    openDisc('line');
+  });
+  $('#cart-empty').hidden = cart.length > 0;
+  $('#count').textContent = cart.length;
+  $('#total').textContent = money(cartNet());
+}
+
+function addItem(p) {
+  const ex = cart.find(i => i.product_id === p.id);
+  if (ex) {
+    // Re-scanning something already in the cart bumps its quantity AND selects
+    // that row, so − КОЛ-ВО immediately undoes an accidental double scan.
+    ex.qty += 1;
+    sel = cart.indexOf(ex);
+  } else {
+    // A genuinely new item does not steal the selection: only the first item
+    // into an empty cart becomes selected (clampSel turns sel = -1 into 0).
+    cart.push({product_id: p.id, name: p.name, price: p.price,
+               unit: p.unit, qty: 1, disc: 0, stock: p.stock});
+  }
+  // Only warn about a balance we actually know: an uncounted product must not
+  // nag on every scan, and a price of 0 is the mistake that really matters.
+  if (counted(p.stock) && p.stock <= 0)
+    toast(`«${p.name}»: остаток ${p.stock}, товар в минусе`, true);
+  if (!(p.price > 0)) toast(`«${p.name}»: цена не указана!`, true);
+  render();
+}
+
+// ---------- scan / search ----------
+$('#scan').addEventListener('keydown', async e => {
+  if (e.key !== 'Enter') return;
+  const q = e.target.value.trim();
+  if (!q) return;
+  const rows = await (await fetch('/api/lookup?q=' + encodeURIComponent(q))).json();
+  if (rows.length === 0) {
+    // Nothing found is exactly the moment a new product needs creating, and
+    // the scanner has already supplied the barcode.
+    openQuick(q);
+  } else if (rows.length === 1) {
+    addItem(rows[0]);
+    $('#results').innerHTML = '';
+  } else {
+    $('#results').innerHTML = `<div class="panel" style="margin-bottom:12px">
+      <table><tbody>${rows.map(r => `<tr data-id="${r.id}">
+        <td>${r.name}</td><td class="num">${money(r.price)} тг</td>
+        <td class="num">ост. ${stockText(r.stock)}</td></tr>`).join('')}</tbody></table></div>`;
+    $('#results').querySelectorAll('tr').forEach(tr => tr.onclick = () => {
+      addItem(rows.find(r => r.id == tr.dataset.id));
+      $('#results').innerHTML = '';
+      $('#scan').focus();
+    });
+  }
+  e.target.value = '';
+});
+
+$('#qty-plus').onclick = () => { if (sel >= 0) { cart[sel].qty++; render(); } };
+$('#qty-minus').onclick = () => {
+  if (sel >= 0 && cart[sel].qty > 1) { cart[sel].qty--; render(); }
+};
+$('#remove').onclick = () => {
+  if (sel < 0) return;
+  cart.splice(sel, 1);
+  sel = sel - 1;      // fall back to the previous row; clampSel fixes the ends
+  render();
+};
+// Two-tap clear instead of a browser dialog: the button asks for itself.
+let clearArmed = null;
+$('#clear').onclick = e => {
+  if (!cart.length) return;
+  if (clearArmed) {
+    clearTimeout(clearArmed); clearArmed = null;
+    e.target.textContent = 'ОЧИСТИТЬ'; e.target.style.background = '';
+    cart = []; sel = -1; render();
+    return;
+  }
+  e.target.textContent = 'ТОЧНО?';
+  e.target.style.background = '#fdeaee';
+  clearArmed = setTimeout(() => {
+    clearArmed = null;
+    e.target.textContent = 'ОЧИСТИТЬ'; e.target.style.background = '';
+  }, 3000);
+};
+
+// ---------- shared number pad ----------
+// One pad, two callers (КОЛ-ВО and УНИВЕРСАЛЬНЫЙ ТОВАР).  The caller passes a
+// title and what to do with the number; the pad knows nothing else.
+let numDone = null;
+
+$('#n-pad').innerHTML =
+  `<button data-d="7">7</button><button data-d="8">8</button><button data-d="9">9</button>` +
+  `<button class="act del" data-act="back">УДАЛИТЬ</button>` +
+  `<button data-d="4">4</button><button data-d="5">5</button><button data-d="6">6</button>` +
+  `<button class="act cancel" data-act="cancel">ОТМЕНА</button>` +
+  `<button data-d="1">1</button><button data-d="2">2</button><button data-d="3">3</button>` +
+  `<button class="act ok" data-act="ok" id="n-ok">OK</button>` +
+  `<button class="wide" data-d="0">0</button><button data-d=".">.</button>`;
+
+$('#n-pad').querySelectorAll('button').forEach(b => {
+  // Keep the caret (and the selection) in the field when a key is tapped.
+  b.addEventListener('mousedown', e => e.preventDefault());
+  b.onclick = () => {
+    const el = $('#n-input'), act = b.dataset.act;
+    if (act === 'cancel') return closeNum();
+    if (act === 'ok') return confirmNum();
+    if (act === 'back') padBack(el); else padType(el, b.dataset.d);
+    updateNum();
+  };
+});
+
+const numVal = () => parseFloat(String($('#n-input').value).replace(',', '.')) || 0;
+
+function updateNum() { $('#n-ok').disabled = !(numVal() > 0); }
+
+function openNum(title, value, done) {
+  numDone = done;
+  $('#n-title').textContent = title;
+  $('#n-input').value = String(value);
+  $('#numpad').hidden = false;
+  updateNum();
+  $('#n-input').focus();
+  $('#n-input').select();   // first digit typed replaces, not appends
+}
+
+function closeNum() {
+  closeKbd();
+  $('#numpad').hidden = true;
+  numDone = null;
+  $('#scan').focus();
+}
+
+function confirmNum() {
+  const v = numVal();
+  if (!(v > 0)) return;
+  const done = numDone;
+  closeNum();
+  done(v);
+}
+
+$('#n-input').addEventListener('input', updateNum);
+
+// ---------- quantity ----------
+$('#qty-set').onclick = () => {
+  if (sel < 0) return toast('Выберите товар в чеке', true);
+  const it = cart[sel];
+  openNum(`КОЛИЧЕСТВО: ${it.name}`, it.qty, v => { cart[sel].qty = v; render(); });
+};
+
+// ---------- universal item ----------
+// A one-off sale with no catalogue entry: it prints on the cheque and counts
+// towards the day's takings, but there is no stock to move.
+$('#universal').onclick = () =>
+  openNum('УНИВЕРСАЛЬНЫЙ ТОВАР, ЦЕНА В ТЕНГЕ', 0, price => {
+    cart.push({product_id: null, name: 'Универсальный товар',
+               price: round2(price), unit: 'шт', qty: 1, disc: 0, stock: null});
+    sel = cart.length - 1;   // land on it, so КОЛ-ВО applies straight away
+    render();
+  });
+
+// ---------- discount ----------
+// The percentage is what gets stored; the tenge box is a second way to enter
+// the same thing, and the two stay in step as you type into either.
+let discScope = 'line', discActive = null;
+
+const dkey = d => `<button data-d="${d}">${d}</button>`;
+$('#dc-pad').innerHTML =
+  dkey(7) + dkey(8) + dkey(9) + `<button class="warn" data-act="back">←</button>` +
+  dkey(4) + dkey(5) + dkey(6) + `<button class="warn" data-act="clear">ОЧИСТИТЬ</button>` +
+  dkey(1) + dkey(2) + dkey(3) + `<button class="done" data-act="ok">ПРИМЕНИТЬ</button>` +
+  dkey(0) + `<button data-d=".">.</button>`;
+
+$('#dc-pad').querySelectorAll('button').forEach(b => {
+  b.addEventListener('mousedown', e => e.preventDefault());
+  b.onclick = () => {
+    const el = discActive || $('#dc-pct');
+    const act = b.dataset.act;
+    if (act === 'ok') return $('#dc-ok').click();
+    if (act === 'back') padBack(el);
+    else if (act === 'clear') put(el, '0', 1);
+    else padType(el, b.dataset.d);
+    syncDisc(el);
+  };
+});
+
+['#dc-pct', '#dc-sum'].forEach(s => {
+  $(s).addEventListener('focus', () => focusDisc($(s)));
+  $(s).addEventListener('input', () => syncDisc($(s)));
+});
+
+function focusDisc(el) {
+  discActive = el;
+  $('#dc-f-pct').classList.toggle('sel', el === $('#dc-pct'));
+  $('#dc-f-sum').classList.toggle('sel', el === $('#dc-sum'));
+  el.focus(); el.select();
+}
+
+function discBase() {
+  return discScope === 'cart' ? cartGross()
+       : (sel >= 0 ? gross(cart[sel]) : 0);
+}
+
+/** Whichever box was typed into drives the other, then the header follows. */
+function syncDisc(el) {
+  const base = discBase();
+  let pct;
+  if (el === $('#dc-sum')) {
+    const sum = Math.min(num(el), base);
+    pct = base ? round2(sum / base * 100) : 0;
+    $('#dc-pct').value = money(pct);
+  } else {
+    pct = Math.min(Math.max(num(el), 0), 100);
+    $('#dc-sum').value = money(round2(base * pct / 100));
+  }
+  $('#dc-base').textContent = money(base) + ' тг';
+  $('#dc-net').textContent = money(round2(base - base * pct / 100)) + ' тг';
+  $('#dc-msg').textContent = num($('#dc-pct')) > 100 ? 'Скидка не может быть больше 100 %' : '';
+  $('#dc-ok').disabled = num($('#dc-pct')) > 100;
+}
+
+function openDisc(scope) {
+  if (!cart.length) return toast('Корзина пуста', true);
+  if (scope === 'line' && sel < 0) return toast('Выберите товар в чеке', true);
+  setDiscScope(scope);
+  $('#discmodal').hidden = false;
+  focusDisc($('#dc-pct'));
+}
+
+function setDiscScope(scope) {
+  discScope = scope;
+  document.querySelectorAll('#discmodal .paytabs button').forEach(b =>
+    b.classList.toggle('on', b.dataset.scope === scope));
+  $('#dc-what').textContent = scope === 'cart'
+    ? `${cart.length} поз.` : (sel >= 0 ? cart[sel].name : '');
+  // Start from whatever discount is already on the line (or the whole cheque).
+  const start = scope === 'cart'
+    ? (cartGross() ? round2(cartDiscount() / cartGross() * 100) : 0)
+    : (sel >= 0 ? cart[sel].disc || 0 : 0);
+  $('#dc-pct').value = money(start);
+  syncDisc($('#dc-pct'));
+}
+
+document.querySelectorAll('#discmodal .paytabs button').forEach(b =>
+  b.onclick = () => setDiscScope(b.dataset.scope));
+
+function applyDisc(pct) {
+  // On the whole cheque it is the same percentage on every line, so each line
+  // still shows its own скидка and the receipt needs no separate concept.
+  if (discScope === 'cart') cart.forEach(it => it.disc = pct);
+  else if (sel >= 0) cart[sel].disc = pct;
+  $('#discmodal').hidden = true;
+  render();
+}
+
+$('#discount').onclick = () => openDisc('line');
+$('#dc-cancel').onclick = () => { $('#discmodal').hidden = true; };
+$('#dc-clear').onclick = () => applyDisc(0);
+$('#dc-ok').onclick = () => {
+  const pct = num($('#dc-pct'));
+  if (pct < 0 || pct > 100) return;
+  applyDisc(round2(pct));
+};
+
+// ---------- payment ----------
+// Laid out like the till the shop already knows: totals on top, mode tabs,
+// the amount field(s), one keypad, three actions along the bottom.
+const ADD = [200, 500, 1000, 2000, 5000, 10000];
+let payKind = 'cash', payTotal = 0, active = null;
+
+const num = el => parseFloat(String(el.value).replace(',', '.')) || 0;
+const setVal = (el, v) => { el.value = money(v); };
+
+function round2(v) { return Math.round(v * 100) / 100; }
+
+function openPay() {
+  if (!cart.length) return toast('Корзина пуста', true);
+  payTotal = cartNet();          // discounts are already applied per line
+  $('#p-total').textContent = money(payTotal) + ' тг';
+  $('#paymodal').hidden = false;
+  setKind('cash');
+}
+
+function closePay() {
+  closeKbd();
+  $('#paymodal').hidden = true;
+  $('#scan').focus();
+}
+
+function setKind(k) {
+  payKind = k;
+  document.querySelectorAll('#paymodal .paytabs button').forEach(b =>
+    b.classList.toggle('on', b.dataset.kind === k));
+
+  // Both fields keep their slot in every mode; only visibility changes.
+  $('#f-cash').classList.toggle('off', k === 'card');
+  $('#f-card').classList.toggle('off', k === 'cash');
+
+  if (k === 'cash') {
+    setVal($('#p-cash'), 0); setVal($('#p-card'), 0);
+    focusField($('#p-cash'));
+  } else if (k === 'card') {
+    // Безналичная is always the whole cheque, so fill it in and be done.
+    setVal($('#p-cash'), 0); setVal($('#p-card'), payTotal);
+    focusField($('#p-card'));
+  } else {
+    // Смешанная starts as "all on the card"; typing cash moves the remainder.
+    setVal($('#p-cash'), 0); setVal($('#p-card'), payTotal);
+    focusField($('#p-cash'));
+  }
+  // In a mixed payment the two halves always add up to the total, so there is
+  // never any change to skip -- the button would do nothing.
+  $('#p-exact').disabled = k === 'mixed';
+  updatePay();
+}
+
+function focusField(el) {
+  active = el;
+  $('#f-cash').classList.toggle('sel', el === $('#p-cash'));
+  $('#f-card').classList.toggle('sel', el === $('#p-card'));
+  el.focus();
+  el.select();   // the first digit typed replaces, it does not append
+}
+
+$('#p-pad').innerHTML = [
+  [7, 8, 9], [4, 5, 6], [1, 2, 3],
+].map((row, i) =>
+  row.map(d => `<button data-d="${d}">${d}</button>`).join('') +
+  `<button class="add" data-add="${ADD[i*2]}">+${ADD[i*2]}</button>` +
+  `<button class="add" data-add="${ADD[i*2+1]}">+${ADD[i*2+1]}</button>`
+).join('') +
+  `<button data-d="0">0</button><button data-d=".">.</button>` +
+  `<button class="warn" data-act="back">←</button>` +
+  `<button class="warn wide" data-act="clear">ОЧИСТИТЬ</button>`;
+
+$('#p-pad').querySelectorAll('button').forEach(b => {
+  b.addEventListener('mousedown', e => e.preventDefault());  // keep the caret
+  b.onclick = () => {
+    const el = active || $('#p-cash');
+    const act = b.dataset.act;
+    if (act === 'back') padBack(el);
+    else if (act === 'clear') put(el, '0', 1);
+    else if (b.dataset.add) put(el, String(round2(num(el) + Number(b.dataset.add))), 99);
+    else padType(el, b.dataset.d);
+    editedField(el);
+  };
+});
+
+// БЕЗ СДАЧИ: hand over exactly the amount owed.
+$('#p-exact').onclick = () => {
+  const el = payKind === 'card' ? $('#p-card') : $('#p-cash');
+  setVal(el, payTotal);
+  editedField(el);
+};
+
+['#p-cash', '#p-card'].forEach(s => {
+  $(s).addEventListener('focus', () => focusField($(s)));
+  $(s).addEventListener('input', () => editedField($(s)));
+});
+
+/** One field was typed into.  In a mixed payment the OTHER field becomes the
+ *  remainder automatically, so the two always add up to the cheque. */
+function editedField(el) {
+  if (payKind === 'mixed') {
+    const other = el === $('#p-cash') ? $('#p-card') : $('#p-cash');
+    setVal(other, round2(Math.max(0, payTotal - num(el))));
+  }
+  updatePay();
+}
+
+function updatePay() {
+  const cash = num($('#p-cash')), card = num($('#p-card'));
+  const got = payKind === 'cash' ? cash : payKind === 'card' ? card : cash + card;
+  const change = round2(Math.max(0, got - payTotal));
+  const short = round2(payTotal - got);
+  let ok = short <= 0.005, msg = '';
+
+  if (payKind === 'card') {
+    // A card payment either covers the cheque or it is a mixed payment.
+    if (short > 0.005) msg = `Не хватает ${money(short)} тг, выберите СМЕШАННУЮ`;
+    else if (change > 0.005) { ok = false; msg = 'Больше суммы чека'; }
+  } else if (!ok) {
+    msg = `Не хватает ${money(short)} тг`;
+  }
+
+  $('#p-got').textContent = money(got) + ' тг';
+  $('#p-change').textContent = money(change) + ' тг';
+  $('#p-msg').textContent = msg;
+  $('#p-confirm').disabled = !ok;
+}
+
+document.querySelectorAll('#paymodal .paytabs button').forEach(b =>
+  b.onclick = () => setKind(b.dataset.kind));
+$('#pay').onclick = openPay;
+$('#p-cancel').onclick = closePay;
+
+function payload() {
+  const cash = num($('#p-cash')), card = num($('#p-card'));
+  if (payKind === 'card') return {kind: 'card'};
+  if (payKind === 'cash') return {kind: 'cash', given: cash};
+  // A "mixed" payment where one half came out at zero is not mixed -- record
+  // what actually happened, so the cheque and the day report stay truthful.
+  if (card <= 0.005) return {kind: 'cash', given: cash};
+  if (cash <= 0.005) return {kind: 'card'};
+  return {kind: 'mixed', card, given: cash};
+}
+
+$('#p-confirm').onclick = async () => {
+  const payment = payload();
+
+  $('#p-confirm').disabled = true;
+  const res = await (await fetch('/api/sale', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({items: cart, payment})
+  })).json();
+  $('#p-confirm').disabled = false;
+
+  if (res.error) return toast('Ошибка: ' + res.error, true);
+  closePay();
+  const chg = res.change > 0 ? ` · СДАЧА ${money(res.change)} тг` : '';
+  toast(res.printed
+    ? `Чек №${res.number} на ${money(res.total)} тг${chg}`
+    : `Чек №${res.number} сохранён, НЕ напечатан: ${res.print_error}`, !res.printed);
+  cart = []; sel = -1; render();
+};
+
+// Enter confirms, Esc cancels -- no browser dialogs anywhere.
+document.addEventListener('keydown', e => {
+  // Logged out: the only thing the keyboard can do is enter the code.
+  if (!$('#login').hidden) {
+    if ($('#l-pin-step').hidden) return;
+    if (/^[0-9]$/.test(e.key)) { e.preventDefault(); loginPin.key(e.key); }
+    else if (e.key === 'Backspace') { e.preventDefault(); loginPin.key('back'); }
+    return;
+  }
+  const modals = {pay: [closePay, '#p-confirm'], num: [closeNum, '#n-ok'],
+                  quick: [closeQuick, '#k-save'],
+                  disc: [() => $('#discmodal').hidden = true, '#dc-ok'],
+                  extras: [() => $('#extrasmodal').hidden = true, '#x-close'],
+                  // Escape backs out; Enter never confirms a cancellation --
+                  // that one has to be pressed on purpose.
+                  void: [closeVoid, '#v-cancel'],
+                  quit: [closeQuit, '#q-cancel'],
+                  upd: [closeUpd, '#u-cancel']};
+  const open = !$('#updmodal').hidden ? 'upd'
+             : !$('#quitmodal').hidden ? 'quit'
+             : !$('#paymodal').hidden ? 'pay'
+             : !$('#numpad').hidden ? 'num'
+             : !$('#quickmodal').hidden ? 'quick'
+             : !$('#voidmodal').hidden ? 'void'
+             : !$('#extrasmodal').hidden ? 'extras'
+             : !$('#discmodal').hidden ? 'disc' : null;
+  if (!open) return;
+  const [close, confirmSel] = modals[open];
+  const confirmBtn = $(confirmSel);
+  if (e.key === 'Escape') { e.preventDefault(); close(); }
+  if (e.key === 'Enter' && !confirmBtn.disabled) {
+    e.preventDefault(); confirmBtn.click();
+  }
+});
+
+// ---------- new product (quick receive, from the sale screen) ----------
+// Opened either by the НОВЫЙ ТОВАР button or automatically by a scan that
+// found nothing -- in which case the barcode is already known and only the
+// name and price are left to type.
+function openQuick(term) {
+  $('#quick').reset();
+  $('#k-status').textContent = '';
+  const isCode = /^\d{6,}$/.test(term || '');
+  $('#k-barcode').value = isCode ? term : '';
+  $('#k-name').value = isCode ? '' : (term || '');
+  $('#k-hint').textContent = term
+    ? `«${term}» не найден в базе. Добавить как новый товар?`
+    : 'Заполните три поля, и товар появится в базе и в чеке.';
+  $('#quickmodal').hidden = false;
+  (isCode || !term ? $('#k-name') : $('#k-barcode')).focus();
+}
+
+function closeQuick() {
+  closeKbd();
+  $('#quickmodal').hidden = true;
+  $('#scan').focus();
+}
+
+async function saveQuick() {
+  const d = Object.fromEntries(new FormData($('#quick')));
+  const res = await postJSON('/api/quick-add', d);
+  if (res.error) { $('#k-status').textContent = res.error; return; }
+  closeQuick();
+  // It was created because a customer is buying it, so put it in the cheque.
+  addItem(res.product);
+  toast(res.created
+    ? `Добавлен «${res.product.name}» по цене ${money(res.product.price)} тг`
+    : `«${res.product.name}» уже был в базе, название и цена обновлены`);
+}
+
+$('#newitem').onclick = () => openQuick('');
+$('#k-cancel').onclick = closeQuick;
+$('#k-save').onclick = saveQuick;
+$('#quick').onsubmit = e => { e.preventDefault(); saveQuick(); };
+
+// Scanning a barcode that is already on file fills the form in rather than
+// letting the operator retype a name that already exists.
+$('#k-barcode').addEventListener('change', async e => {
+  const q = e.target.value.trim(); if (!q) return;
+  const rows = await (await fetch('/api/lookup?q=' + encodeURIComponent(q))).json();
+  const hit = rows[0];
+  if (!hit) return;
+  $('#k-name').value = hit.name;
+  $('#k-price').value = hit.price || '';
+  $('#k-status').textContent = `Уже есть: ${hit.name}, можно исправить цену`;
+  $('#k-price').focus();
+});
+
+// ---------- receive ----------
+// One shelf item often carries several stickers -- the same тетрадь in three
+// cover designs.  Each + adds another box; scanning into it is enough.
+let extraSeq = 0;
+
+function addCodeBox(value) {
+  const id = 'x' + (++extraSeq);
+  const box = document.createElement('label');
+  box.innerHTML = `Доп. штрихкод
+    <span class="codeline">
+      <input id="${id}" class="extracode" autocomplete="off" placeholder="сканируйте">
+      <button type="button" title="Убрать">×</button>
+    </span>`;
+  $('#r-extra').append(box);
+  box.querySelector('button').onclick = () => box.remove();
+  const input = box.querySelector('input');
+  if (value) { input.value = value; input.readOnly = true; }  // already on file
+  else input.focus();
+  return input;
+}
+
+$('#r-addcode').onclick = () => addCodeBox('');
+
+function extraCodes() {
+  return [...document.querySelectorAll('#r-extra .extracode')]
+    .map(i => i.value.trim()).filter(Boolean);
+}
+
+function resetReceive() {
+  $('#recv').reset();
+  $('#r-extra').innerHTML = '';
+  $('#r-status').textContent = '';
+  $('#r-barcode').focus();
+}
+
+$('#recv').onsubmit = async e => {
+  e.preventDefault();
+  const d = Object.fromEntries(new FormData(e.target));
+  d.extra = extraCodes();
+  const res = await postJSON('/api/receive', d);
+  if (res.error) return toast('Ошибка: ' + res.error, true);
+  const codes = res.added_codes.length
+    ? ` · доп. штрихкодов: +${res.added_codes.length}` : '';
+  toast((res.created
+    ? `Создан товар «${res.product.name}», остаток ${stockText(res.product.stock)}`
+    : counted(res.product.stock)
+      ? `«${res.product.name}»: новый остаток ${res.product.stock}`
+      : `«${res.product.name}»: приход записан, но товар ещё не посчитан`) + codes);
+  resetReceive(); loadStock();
+};
+
+// Scanning a known sticker fills in the name and shows the other stickers the
+// same item already carries, so nobody adds one twice.
+$('#r-barcode').addEventListener('change', async e => {
+  const q = e.target.value.trim(); if (!q) return;
+  const rows = await (await fetch('/api/lookup?q=' + encodeURIComponent(q))).json();
+  const hit = rows[0];
+  $('#r-extra').innerHTML = '';
+  $('#r-status').textContent = hit
+    ? `Известный товар: ${hit.name} (остаток ${stockText(hit.stock)})`
+    : 'Новый товар, укажите наименование';
+  if (!hit) return;
+  $('#r-name').value = hit.name;
+  (hit.codes || []).forEach(c => addCodeBox(c));
+});
+
+// ---------- инвентаризация ----------
+$('#cnt').onsubmit = async e => {
+  e.preventDefault();
+  const d = Object.fromEntries(new FormData(e.target));
+  const res = await adminPost('/api/count', d);
+  if (res.error) return toast('Ошибка: ' + res.error, true);
+  const was = counted(res.before) ? `было ${res.before}` : 'не был посчитан';
+  toast(`«${res.product.name}»: ${was} → стало ${res.after}`);
+  e.target.reset(); $('#c-status').textContent = ''; loadStock();
+  $('#c-barcode').focus();
+};
+
+// Scanning into инвентаризация shows what is on file before anything is typed.
+$('#c-barcode').addEventListener('change', async e => {
+  const q = e.target.value.trim(); if (!q) return;
+  const rows = await (await fetch('/api/lookup?q=' + encodeURIComponent(q))).json();
+  const hit = rows[0];
+  $('#c-status').textContent = hit
+    ? `${hit.name}, сейчас в базе: ${stockText(hit.stock)}`
+    : 'Товар не найден, примите его через ПРИЁМКУ';
+  if (hit) $('#c-qty').focus();
+});
+
+// ---------- on-screen keyboard ----------
+// The till has no physical keyboard, so anything that expects letters gets
+// this.  It is deliberately part of the layout rather than an overlay: body
+// and any open dialog are padded by its measured height, so it can never sit
+// on top of the field being typed into.
+const LAYOUTS = {
+  ru: {label: 'РУС', next: 'en', nextLabel: 'ENG',
+       rows: ['йцукенгшщзхъ', 'фывапролджэё', 'ячсмитьбю'],
+       sym:  '!"№%:,.;()'},
+  en: {label: 'ENG', next: 'ru', nextLabel: 'РУС',
+       rows: ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'],
+       sym:  '!@#$%^&*()'},
+};
+const DIGITS = '1234567890';
+let kbdTarget = null, kbdKind = 'kbd', kbdLayout = 'ru', kbdShift = false, kbdCaps = false;
+
+function kbdInsert(el, s) {
+  const [v, a, b] = caret(el);
+  el.value = v.slice(0, a) + s + v.slice(b);
+  const pos = a + s.length;
+  try { el.setSelectionRange(pos, pos); } catch (_) {}
+  el.dispatchEvent(new Event('input', {bubbles: true}));  // search boxes listen
+}
+
+function kbdBack(el) {
+  const [v, a, b] = caret(el);
+  if (b > a) el.value = v.slice(0, a) + v.slice(b);
+  else { el.value = v.slice(0, Math.max(0, a - 1)) + v.slice(a); }
+  const pos = b > a ? a : Math.max(0, a - 1);
+  try { el.setSelectionRange(pos, pos); } catch (_) {}
+  el.dispatchEvent(new Event('input', {bubbles: true}));
+}
+
+function renderKbd() {
+  const key = (ch, out, cls) =>
+    `<button data-k="${out ?? ch}" class="${cls || ''}">${ch}</button>`;
+
+  if (kbdKind === 'num') {
+    // A field that only ever holds a number gets digits, not the alphabet.
+    const row = (...keys) => `<div class="krow">${keys.join('')}</div>`;
+    $('#kbd').innerHTML = `<div class="numdock">` +
+      row(key('7'), key('8'), key('9'),
+          `<button data-k="\\b" class="mod">⌫</button>`) +
+      row(key('4'), key('5'), key('6'),
+          `<button data-k="\\x" class="mod">ОЧИСТИТЬ</button>`) +
+      row(key('1'), key('2'), key('3'),
+          `<button data-k="\\d" class="done">ГОТОВО</button>`) +
+      row(key('0', '0', 'wide'), key('.'), key('00')) + `</div>`;
+    return wireKbd();
+  }
+
+  const L = LAYOUTS[kbdLayout];
+  const up = kbdCaps !== kbdShift;          // shift inverts caps, as usual
+  const letters = row => [...row].map(c =>
+    key(up ? c.toUpperCase() : c, up ? c.toUpperCase() : c)).join('');
+
+  $('#kbd').innerHTML =
+    `<div class="krow">` +
+      [...DIGITS].map((d, i) => key(kbdShift ? L.sym[i] : d)).join('') +
+      `<button data-k="\\b" class="mod wide">⌫</button></div>` +
+    `<div class="krow">${letters(L.rows[0])}</div>` +
+    `<div class="krow">${letters(L.rows[1])}</div>` +
+    `<div class="krow">` +
+      `<button data-k="\\s" class="mod wide${kbdShift ? ' on' : ''}">⇧</button>` +
+      letters(L.rows[2]) +
+      key(',') + key('.') + `</div>` +
+    `<div class="krow">` +
+      `<button data-k="\\l" class="mod wide">${L.nextLabel}</button>` +
+      `<button data-k="\\c" class="mod wide${kbdCaps ? ' on' : ''}">CAPS</button>` +
+      key('-') + key('/') + key('(') + key(')') + key('"') +
+      `<button data-k=" " class="space">ПРОБЕЛ</button>` +
+      `<button data-k="\\d" class="done wide">ГОТОВО</button></div>`;
+  wireKbd();
+}
+
+function wireKbd() {
+  $('#kbd').querySelectorAll('button').forEach(b => {
+    // Keep the caret and the selection in the field the keys are typing into.
+    b.addEventListener('mousedown', e => e.preventDefault());
+    b.onclick = () => kbdKey(b.dataset.k);
+  });
+  // Measure rather than guess, so the padding below always matches exactly.
+  document.body.style.setProperty('--kbd-h', $('#kbd').offsetHeight + 'px');
+}
+
+function kbdKey(k) {
+  if (k === '\\l') { kbdLayout = LAYOUTS[kbdLayout].next; return renderKbd(); }
+  if (k === '\\c') { kbdCaps = !kbdCaps; return renderKbd(); }
+  if (k === '\\s') { kbdShift = !kbdShift; return renderKbd(); }
+  if (k === '\\d') {
+    // ГОТОВО doubles as Enter for the scan box, which searches on Enter.
+    const el = kbdTarget;
+    closeKbd();
+    if (el && el.id === 'scan')
+      el.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+    return;
+  }
+  if (!kbdTarget) return;
+  if (k === '\\x') {
+    kbdTarget.value = '';
+    try { kbdTarget.setSelectionRange(0, 0); } catch (_) {}
+    kbdTarget.dispatchEvent(new Event('input', {bubbles: true}));
+  } else if (k === '\\b') {
+    kbdBack(kbdTarget);
+  } else if (kbdKind === 'num') {
+    // One decimal point per number, and no leading zero in front of digits.
+    if (k === '.' && String(kbdTarget.value).includes('.')) return;
+    if (/^0$/.test(kbdTarget.value) && k !== '.') kbdTarget.value = '';
+    kbdInsert(kbdTarget, k);
+  } else {
+    kbdInsert(kbdTarget, k);
+  }
+  if (kbdShift) { kbdShift = false; renderKbd(); }   // shift is one-shot
+}
+
+function openKbd(el, kind) {
+  kbdTarget = el;
+  kbdKind = kind || (el.hasAttribute('data-num') ? 'num' : 'kbd');
+  kbdShift = false;
+  document.body.classList.add('kbd-open');
+  renderKbd();
+}
+
+function closeKbd() {
+  kbdTarget = null;
+  document.body.classList.remove('kbd-open');
+}
+
+// Every field that expects typing raises its own input method on focus:
+// letters get the keyboard, numbers get the numpad.  Barcode fields are
+// deliberately excluded -- those are scanned, not typed.
+document.querySelectorAll('[data-kbd], [data-num]').forEach(el =>
+  el.addEventListener('focus', () => openKbd(el)));
+
+// The scan box never opens the keyboard by itself -- focus lives there so the
+// scanner always lands somewhere useful, and the keyboard would be permanently
+// on screen covering the cart.  АБВ summons it for searching by name.
+$('#scan-kbd').addEventListener('mousedown', e => e.preventDefault());
+$('#scan-kbd').onclick = () => { $('#scan').focus(); openKbd($('#scan')); };
+
+// Moving to any field that does not want letters puts the keyboard away.
+document.addEventListener('focusin', e => {
+  if (kbdTarget && e.target !== kbdTarget &&
+      !e.target.hasAttribute('data-kbd') && !e.target.hasAttribute('data-num'))
+    closeKbd();
+});
+
+// ---------- two-tap confirmation ----------
+// Destructive buttons ask a second time in place, never through a browser
+// dialog: the operator sees what they are about to remove while confirming.
+function confirmTap(btn, label, action) {
+  if (btn._armed) {
+    clearTimeout(btn._t);
+    btn._armed = false; btn.textContent = label; btn.classList.remove('arm');
+    return action();
+  }
+  btn._armed = true;
+  btn.textContent = 'ТОЧНО?';
+  btn.classList.add('arm');
+  btn._t = setTimeout(() => {
+    btn._armed = false; btn.textContent = label; btn.classList.remove('arm');
+  }, 3000);
+}
+
+// ---------- cashiers (admin) ----------
+let pinTarget = null;
+
+// The same four-dot pad both changes an existing cashier's code and picks one
+// for a cashier being added -- there is no keyboard to type digits with.
+const setPin = makePin('#sp-pad', '#sp-dots', '#sp-msg', async code => {
+  if (pinTarget && pinTarget.field) {
+    $(pinTarget.field).value = code;      // shown, so she can read it back out
+    $('#setpin').hidden = true;
+    return;
+  }
+  const res = await adminPost('/api/cashiers/pin', {id: pinTarget.id, pin: code});
+  if (res.error) return setPin.fail(res.error);
+  $('#setpin').hidden = true;
+  toast(`Код кассира «${res.name}» изменён`);
+}, '#sp-ok');
+
+function openSetPin(target, who) {
+  pinTarget = target;
+  $('#sp-who').textContent = who;
+  setPin.reset();
+  $('#setpin').hidden = false;
+}
+
+$('#sp-ok').onclick = () => setPin.submit();
+$('#sp-cancel').onclick = () => { $('#setpin').hidden = true; };
+
+$('#ca-pin').onclick = () => openSetPin({field: '#ca-pin'}, 'НОВЫЙ КАССИР');
+$('#ca-pin').addEventListener('focus', () =>
+  openSetPin({field: '#ca-pin'}, 'НОВЫЙ КАССИР'));
+
+async function loadCashiers() {
+  const rows = await (await fetch('/api/cashiers')).json();
+  if (rows.error) return;
+  $('#cashiers').innerHTML = rows.map(c => `<tr data-id="${c.id}">
+    <td><b>${c.name}</b></td>
+    <td>${c.is_owner ? 'владелец' : 'кассир'}</td>
+    <td class="num"><button class="rowbtn" data-act="pin">СМЕНИТЬ КОД</button></td>
+    <td class="num">${c.is_owner ? '<span class="hintcell">нельзя</span>'
+      : '<button class="rowbtn danger" data-act="del">УДАЛИТЬ</button>'}</td>
+  </tr>`).join('');
+
+  $('#cashiers').querySelectorAll('button').forEach(b => b.onclick = () => {
+    const tr = b.closest('tr');
+    const c = rows.find(x => x.id == tr.dataset.id);
+    if (b.dataset.act === 'pin') {
+      openSetPin(c, c.name);
+    } else {
+      confirmTap(b, 'УДАЛИТЬ', async () => {
+        const res = await adminPost('/api/cashiers/delete', {id: c.id});
+        if (res.error) return toast('Ошибка: ' + res.error, true);
+        toast(`Кассир «${res.name}» удалён`);
+        loadCashiers();
+      });
+    }
+  });
+}
+
+$('#cash-add').onsubmit = async e => {
+  e.preventDefault();
+  const d = Object.fromEntries(new FormData(e.target));
+  const res = await adminPost('/api/cashiers/add', d);
+  if (res.error) { $('#ca-status').textContent = res.error; return; }
+  $('#ca-status').textContent = '';
+  toast(`Кассир «${res.name}» добавлен`);
+  e.target.reset();
+  loadCashiers();
+};
+
+// ---------- deletion mode ----------
+// The selection is a set of ids kept across searches, so a big cleanup can be
+// built up filter by filter ("тетрадь", then "ручка", ...) and deleted once.
+let delMode = false;
+const picked = new Set();
+
+function updateSel() {
+  $('#s-selcount').textContent = `Выбрано: ${picked.size}`;
+  $('#s-delete').disabled = picked.size === 0;
+  $('#s-delete').textContent = picked.size
+    ? `УДАЛИТЬ ВЫБРАННОЕ (${picked.size})` : 'УДАЛИТЬ ВЫБРАННОЕ';
+}
+
+$('#s-delmode').onclick = () => {
+  delMode = !delMode;
+  $('#stockpanel').classList.toggle('delmode', delMode);
+  $('#s-delmode').classList.toggle('on', delMode);
+  $('#s-delmode').textContent = delMode ? 'ВЫЙТИ ИЗ РЕЖИМА' : 'РЕЖИМ УДАЛЕНИЯ';
+  if (!delMode) picked.clear();
+  updateSel();
+  loadStock();
+};
+
+// Selects every product matching the current filter, not just the rows shown.
+$('#s-all').onclick = async () => {
+  const params = stockParams();
+  params.set('idsonly', '1');
+  const res = await (await fetch('/api/products?' + params)).json();
+  res.ids.forEach(id => picked.add(id));
+  toast(`Выбрано ${res.count} по текущему фильтру, всего ${picked.size}`);
+  updateSel();
+  loadStock();
+};
+
+$('#s-none').onclick = () => { picked.clear(); updateSel(); loadStock(); };
+
+$('#s-delete').onclick = async () => {
+  if (!picked.size) return;
+  const ids = [...picked];
+  const p = await adminPost('/api/products/delete-preview', {ids});
+  if (p.error) return toast('Ошибка: ' + p.error, true);
+
+  $('#del-count').textContent = `${ids.length} шт.`;
+  $('#del-split').innerHTML =
+    sumRow('Удалить насовсем', p.deleted) +
+    sumRow('Скрыть (есть история продаж)', p.archived) +
+    (p.missing ? sumRow('Уже отсутствуют', p.missing) : '');
+  const list = (title, names, total) => !names.length ? '' :
+    `<h4>${title}: ${total}</h4>` + names.map(n => `<div>${n}</div>`).join('') +
+    (total > names.length ? `<div>… и ещё ${total - names.length}</div>` : '');
+  $('#del-samples').innerHTML =
+    list('УДАЛИТЬ НАСОВСЕМ', p.sample_deleted, p.deleted) +
+    list('СКРЫТЬ', p.sample_archived, p.archived);
+  $('#del-warn').textContent =
+    `Удалить ${p.deleted + p.archived} товаров?`;
+
+  $('#del-step1').hidden = false;
+  $('#del-step2').hidden = true;
+  $('#del-step3').hidden = true;
+  $('#delmodal').hidden = false;
+};
+
+$('#del-cancel').onclick = () => { $('#delmodal').hidden = true; };
+$('#del-next').onclick = () => { $('#del-step1').hidden = true; $('#del-step2').hidden = false; };
+$('#del-back').onclick = () => { $('#del-step2').hidden = true; $('#del-step1').hidden = false; };
+
+$('#del-go').onclick = async () => {
+  const btn = $('#del-go');
+  confirmTap(btn, 'УДАЛИТЬ', async () => {
+    btn.disabled = true;
+    const res = await adminPost('/api/products/delete', {ids: [...picked]});
+    btn.disabled = false;
+    if (res.error) return toast('Ошибка: ' + res.error, true);
+    $('#del-result').innerHTML =
+      sumRow('Удалено', res.deleted) + sumRow('Скрыто', res.archived);
+    $('#del-step2').hidden = true;
+    $('#del-step3').hidden = false;
+    picked.clear();
+    updateSel();
+    loadStock();
+  });
+};
+
+$('#del-close').onclick = () => { $('#delmodal').hidden = true; };
+
+let stockOnlyUncounted = false, stockOnlyNoCost = false;
+$('#s-uncounted').onclick = () => {
+  stockOnlyUncounted = !stockOnlyUncounted;
+  $('#s-uncounted').classList.toggle('on', stockOnlyUncounted);
+  loadStock();
+};
+$('#s-nocost').onclick = () => {
+  stockOnlyNoCost = !stockOnlyNoCost;
+  $('#s-nocost').classList.toggle('on', stockOnlyNoCost);
+  loadStock();
+};
+let findTimer;
+$('#s-find').addEventListener('input', () => {
+  clearTimeout(findTimer);            // the catalogue is big; don't query per keystroke
+  findTimer = setTimeout(loadStock, 250);
+});
+
+function stockParams() {
+  const p = new URLSearchParams({q: $('#s-find').value.trim()});
+  if (stockOnlyUncounted) p.set('uncounted', '1');
+  if (stockOnlyNoCost) p.set('nocost', '1');
+  return p;
+}
+
+async function loadStock() {
+  const d = await (await fetch('/api/products?' + stockParams())).json();
+  $('#stock').innerHTML = d.rows.map(r => `<tr data-id="${r.id}"
+      class="${picked.has(r.id) ? 'picked' : ''}">
+    <td class="delonly pick"><input type="checkbox" ${picked.has(r.id) ? 'checked' : ''}></td>
+    <td>${r.name}</td><td>${r.barcode ?? 'нет кода'}</td>
+    <td class="num ${r.cost > 0 ? '' : 'low'}">${money(r.cost)}</td>
+    <td class="num ${r.price > 0 ? '' : 'low'}">${money(r.price)} тг</td>
+    <td class="num ${counted(r.stock) && r.stock <= r.min_stock ? 'low' : ''}"
+        >${stockText(r.stock)}</td></tr>`).join('')
+    || '<tr><td class="hint">Ничего не найдено</td></tr>';
+
+  // The whole row is the target: a checkbox alone is a small thing to hit.
+  $('#stock').querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = () => {
+    if (!delMode) return;
+    const id = +tr.dataset.id;
+    picked.has(id) ? picked.delete(id) : picked.add(id);
+    tr.classList.toggle('picked', picked.has(id));
+    const box = tr.querySelector('input');
+    if (box) box.checked = picked.has(id);
+    updateSel();
+  });
+  $('#s-info').textContent =
+    `Показано ${d.shown} из ${d.total} · не посчитано: ${d.uncounted}` +
+    ` · без закуп. цены: ${d.nocost} · без цены продажи: ${d.noprice}`;
+}
+
+// ---------- cashier login / operational day ----------
+let shift = null, isOwner = false, loginName = null;
+let printReport = false, closedShift = null;
+
+const when = iso => new Date(iso).toLocaleString('ru-RU',
+  {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+
+const loginPin = makePin('#l-pad', '#l-dots', '#l-msg', async code => {
+  const res = await (await fetch('/api/shift/open', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({cashier: loginName, pin: code})
+  })).json();
+  if (res.error) return loginPin.fail(res.error === 'неверный код'
+    ? 'Неверный код. Попробуйте ещё раз.' : res.error);
+  enterTill(res.shift, res.owner);
+});
+
+function showLogin() {
+  closeKbd();
+  shift = null; isOwner = false;
+  $('#nav-admin').hidden = true;
+  cart = []; sel = -1; render();
+  $('#l-pin-step').hidden = true;
+  $('#l-who-step').hidden = false;
+  loginPin.reset();
+  $('#login').hidden = false;
+}
+
+function enterTill(s, owner) {
+  shift = s;
+  isOwner = !!owner;
+  // Only the owner is offered the admin side at all; the server refuses it
+  // for anyone else regardless of what the page shows.
+  $('#nav-admin').hidden = !isOwner;
+  $('#login').hidden = true;
+  $('#cashier').textContent = s.cashier;
+  showTab('sale');
+}
+
+$('#l-back').onclick = () => {
+  $('#l-pin-step').hidden = true;
+  $('#l-who-step').hidden = false;
+};
+
+async function boot() {
+  const s = await (await fetch('/api/shift')).json();
+  // Видна и на экране входа, и в углу во время работы: по телефону это первое,
+  // что нужно спросить, когда что-то ведёт себя не так.
+  $('#ver').textContent = s.version || '';
+  $('#login-ver').textContent = s.version || '';
+  $('#l-cashiers').innerHTML =
+    s.cashiers.map(c => `<button data-c="${c}">${c}</button>`).join('');
+  $('#l-cashiers').querySelectorAll('button').forEach(b => b.onclick = () => {
+    loginName = b.dataset.c;
+    $('#l-name').textContent = loginName;
+    $('#l-who-step').hidden = true;
+    $('#l-pin-step').hidden = false;
+    loginPin.reset();
+  });
+  // A day left open (browser closed, power cut) is rejoined, not restarted.
+  if (s.open) enterTill(s.shift, s.owner); else showLogin();
+}
+
+// ---------- end of the operational day ----------
+const sumRow = (k, v, cls) => `<tr class="${cls || ''}"><td>${k}</td><td>${v}</td></tr>`;
+
+function daySummary(d, closedAt) {
+  const avg = d.receipts ? d.revenue / d.receipts : 0;
+  return sumRow('Кассир', d.shift ? d.shift.cashier : (closedShift || {}).cashier || '') +
+    sumRow('Открыт', when((d.shift || closedShift).opened_at)) +
+    (closedAt ? sumRow('Закрыт', when(closedAt)) : '') +
+    sumRow('Чеков', d.receipts) +
+    sumRow('ВЫРУЧКА', money(d.revenue) + ' тг', 'big') +
+    sumRow('  наличными', money(d.cash) + ' тг') +
+    sumRow('  по карте', money(d.card) + ' тг') +
+    sumRow('Скидки', money(d.discount || 0) + ' тг') +
+    sumRow('Прибыль', money(d.profit) + ' тг') +
+    sumRow('Средний чек', money(avg) + ' тг');
+}
+
+$('#d-finish').onclick = async () => {
+  if (cart.length)
+    return toast('В корзине есть товары, сначала завершите чек', true);
+  const d = await (await fetch('/api/day')).json();
+  if (!d.open) return toast('Операционный день не открыт', true);
+  $('#c-preview').innerHTML = daySummary(d);
+  $('#c-warn').textContent = d.receipts
+    ? 'После завершения продажи за этот день закрываются, изменить их будет нельзя.'
+    : 'За этот день не было ни одной продажи.';
+  printReport = false;
+  $('#c-print-toggle').textContent = 'НЕТ';
+  $('#c-print-toggle').classList.remove('on');
+  $('#c-confirm').hidden = false;
+  $('#c-done').hidden = true;
+  $('#closemodal').hidden = false;
+};
+
+$('#c-print-toggle').onclick = () => {
+  printReport = !printReport;
+  $('#c-print-toggle').textContent = printReport ? 'ДА' : 'НЕТ';
+  $('#c-print-toggle').classList.toggle('on', printReport);
+};
+
+$('#c-cancel').onclick = () => { $('#closemodal').hidden = true; };
+
+/** A copy of the whole base is taken every time a day is closed.  Success is
+ *  stated quietly; a failure is shouted, because it means the shop is running
+ *  on one file with nothing behind it. */
+function showBackup(res) {
+  const el = $('#c-backup');
+  if (res.backup) {
+    el.textContent = 'Резервная копия сохранена: ' + res.backup;
+    el.style.color = '';
+  } else {
+    el.textContent = 'ВНИМАНИЕ: резервная копия НЕ сохранена. '
+                   + (res.backup_error || 'Причина неизвестна');
+    el.style.color = 'var(--red)';
+  }
+}
+
+$('#c-do').onclick = async () => {
+  $('#c-do').disabled = true;
+  const res = await (await fetch('/api/shift/close', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({print: printReport})
+  })).json();
+  $('#c-do').disabled = false;
+  if (res.error) return toast('Ошибка: ' + res.error, true);
+
+  closedShift = res.shift;
+  $('#c-result').innerHTML = daySummary(res.shift, res.shift.closed_at);
+  $('#c-printed').textContent = !printReport ? ''
+    : res.printed ? 'Отчёт напечатан.'
+    : 'Отчёт НЕ напечатан: ' + res.print_error;
+  showBackup(res);
+  $('#c-confirm').hidden = true;
+  $('#c-done').hidden = false;
+};
+
+$('#c-reprint').onclick = async () => {
+  const res = await (await fetch('/api/shift/print', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({id: closedShift.id})
+  })).json();
+  $('#c-printed').textContent = res.error ? 'Ошибка: ' + res.error
+    : res.printed ? 'Отчёт напечатан.'
+    : 'Отчёт НЕ напечатан: ' + res.print_error;
+};
+
+$('#c-exit').onclick = () => {
+  $('#closemodal').hidden = true;
+  showLogin();
+};
+
+// ---------- day ----------
+async function loadDay() {
+  const d = await (await fetch('/api/day')).json();
+  if (!d.open) return showLogin();
+  $('#d-cashier').textContent = d.shift.cashier;
+  $('#d-opened').textContent = when(d.shift.opened_at);
+  $('#d-rev').textContent = money(d.revenue);
+  $('#d-cnt').textContent = d.receipts;
+  $('#d-prof').textContent = money(d.profit);
+  $('#d-cash').textContent = money(d.cash);
+  $('#d-card').textContent = money(d.card);
+  $('#d-disc').textContent = money(d.discount || 0);
+  $('#d-avg').textContent = money(d.receipts ? d.revenue / d.receipts : 0);
+  $('#d-pay').innerHTML = d.by_payment.map(p =>
+    `<tr><td>${p.payment}</td><td class="num">${p.n} чек.</td>
+     <td class="num">${money(p.sum)} тг</td></tr>`).join('')
+    || '<tr><td class="hint">Продаж пока нет</td></tr>';
+  $('#d-top').innerHTML = d.top.map(t =>
+    `<tr><td>${t.name}</td><td class="num">${t.qty}</td>
+     <td class="num">${money(t.sum)} тг</td></tr>`).join('')
+    || '<tr><td class="hint">Продаж пока нет</td></tr>';
+  loadReceipts();
+}
+
+// ---------- receipts of the day ----------
+// Cancelled cheques stay in the list, struck through and marked: the cashier
+// has to be able to see that the missing 900 тг was a cancellation and not a
+// cheque that went astray.
+let receipts = [];
+
+const hhmm = ts => (ts || '').slice(11, 16);
+
+/** Names of everything in the cheque, cut short: a basket of twenty items
+ *  must not push the buttons in the last column off the screen. */
+function lineNames(r) {
+  const all = r.items.map(i => i.name).join(', ');
+  return all.length > 70 ? all.slice(0, 70) + '…' : all;
+}
+
+async function loadReceipts() {
+  receipts = await (await fetch('/api/receipts')).json();
+  $('#d-receipts').innerHTML = receipts.map(r => `
+    <tr class="${r.voided ? 'voided' : ''}">
+      <td>№${r.number}</td>
+      <td>${hhmm(r.ts)}</td>
+      <td>${lineNames(r)}</td>
+      <td class="num">${money(r.total)} тг</td>
+      <td class="num act">
+        <button class="rowbtn" data-print="${r.id}">ПЕЧАТЬ</button>
+        ${r.voided
+          ? `<span class="vmark">ОТМЕНЁН</span>`
+          : `<button class="rowbtn danger" data-void="${r.id}">ОТМЕНА</button>`}
+      </td>
+    </tr>`).join('')
+    || '<tr><td class="hint" colspan="5">Чеков за день пока нет</td></tr>';
+  $('#d-receipts').querySelectorAll('[data-print]').forEach(b =>
+    b.onclick = () => printReceipt(+b.dataset.print));
+  $('#d-receipts').querySelectorAll('[data-void]').forEach(b =>
+    b.onclick = () => openVoid(+b.dataset.void));
+}
+
+/** The newest cheque that has not been cancelled -- what «последний чек» means
+ *  at the till, since cancelling the same one twice makes no sense. */
+const lastLive = () => receipts.find(r => !r.voided) || null;
+
+async function printReceipt(id) {
+  const res = await postJSON('/api/receipt/print', {id});
+  if (res.error) return toast('Ошибка: ' + res.error, true);
+  toast(res.printed ? `Чек №${res.number}: копия напечатана`
+                    : `НЕ напечатан: ${res.print_error}`, !res.printed);
+}
+
+// ---------- extras menu ----------
+async function openExtras() {
+  await loadReceipts();
+  const last = lastLive();
+  const label = last ? `чек №${last.number} на ${money(last.total)} тг`
+                     : 'чеков за день пока нет';
+  $('#x-last').textContent = label;
+  $('#x-last2').textContent = label;
+  $('#x-print').disabled = $('#x-void').disabled = !last;
+  $('#extrasmodal').hidden = false;
+}
+
+$('#extras').onclick = openExtras;
+$('#x-close').onclick = () => { $('#extrasmodal').hidden = true; };
+$('#x-print').onclick = () => {
+  const last = lastLive();
+  if (last) printReceipt(last.id);
+};
+$('#x-void').onclick = () => {
+  const last = lastLive();
+  if (last) { $('#extrasmodal').hidden = true; openVoid(last.id); }
+};
+$('#x-list').onclick = () => {
+  $('#extrasmodal').hidden = true;
+  showTab('day');
+  $('#d-receipts').scrollIntoView({behavior: 'smooth', block: 'center'});
+};
+
+// ---------- void a receipt ----------
+let voidId = null, voidPrint = false;
+
+function openVoid(id) {
+  const r = receipts.find(x => x.id === id);
+  if (!r) return toast('Чек не найден', true);
+  voidId = id;
+  voidPrint = false;
+  $('#v-print-toggle').textContent = 'НЕТ';
+  $('#v-print-toggle').classList.remove('on');
+  $('#v-number').textContent = '№' + r.number;
+  $('#v-lines').innerHTML = r.items.map(i =>
+    `<tr><td>${i.name}</td>
+     <td>${i.qty} ${i.unit} × ${money(i.price)}</td></tr>`).join('')
+    + `<tr class="big"><td>ИТОГО</td><td>${money(r.total)} тг</td></tr>`;
+  $('#v-sum').textContent = money(r.total) + ' тг';
+  $('#v-sure-text').textContent = `ОТМЕНИТЬ ЧЕК №${r.number}`;
+  $('#v-confirm').hidden = false;
+  $('#v-sure').hidden = true;
+  $('#v-done').hidden = true;
+  $('#voidmodal').hidden = false;
+}
+
+const closeVoid = () => { $('#voidmodal').hidden = true; voidId = null; };
+
+$('#v-print-toggle').onclick = () => {
+  voidPrint = !voidPrint;
+  $('#v-print-toggle').textContent = voidPrint ? 'ДА' : 'НЕТ';
+  $('#v-print-toggle').classList.toggle('on', voidPrint);
+};
+$('#v-cancel').onclick = closeVoid;
+$('#v-do').onclick = () => { $('#v-confirm').hidden = true; $('#v-sure').hidden = false; };
+$('#v-back').onclick = () => { $('#v-sure').hidden = true; $('#v-confirm').hidden = false; };
+
+$('#v-really').onclick = async () => {
+  $('#v-really').disabled = true;
+  const res = await postJSON('/api/receipt/void',
+                             {id: voidId, print: voidPrint});
+  $('#v-really').disabled = false;
+  if (res.error) { closeVoid(); return toast('Ошибка: ' + res.error, true); }
+  $('#v-done-num').textContent = '№' + res.number;
+  $('#v-done-note').textContent =
+    `Товар вернулся на склад, ${money(res.total)} тг убрано из выручки дня.`
+    + (!voidPrint ? '' : res.printed ? ' Чек отмены напечатан.'
+                                     : ' НЕ напечатан: ' + res.print_error);
+  $('#v-sure').hidden = true;
+  $('#v-done').hidden = false;
+  // loadDay() refreshes the list itself, so only one of the two runs.
+  if ($('#tab-day').hidden) await loadReceipts(); else await loadDay();
+};
+
+$('#v-ok').onclick = closeVoid;
+
+render();
+boot();
+document.addEventListener('click', e => {
+  // Keep focus in the scan box so the scanner always lands somewhere useful --
+  // but never steal focus away from a modal while it is open.
+  if (!$('#login').hidden || !$('#paymodal').hidden || !$('#numpad').hidden
+      || !$('#quickmodal').hidden || !$('#discmodal').hidden
+      || !$('#closemodal').hidden || !$('#extrasmodal').hidden
+      || !$('#voidmodal').hidden || !$('#quitmodal').hidden
+      || !$('#updmodal').hidden
+      || !$('#delmodal').hidden || !$('#setpin').hidden) return;
+  if (!$('#tab-sale').hidden && !e.target.closest('input,button,td'))
+    $('#scan').focus();
+});
+</script>
+</body>
+</html>
