@@ -13,11 +13,13 @@ Option Explicit
 Dim sh, dest, desktop, startup
 Set sh = CreateObject("WScript.Shell")
 
-dest = sh.ExpandEnvironmentStrings("%TAU_DEST%")
+dest = Tidy(sh.ExpandEnvironmentStrings("%TAU_DEST%"))
 If dest = "" Or dest = "%TAU_DEST%" Then dest = "C:\TauTill"
 
-desktop = sh.SpecialFolders("Desktop")
-startup = sh.SpecialFolders("Startup")
+desktop = Folder("Desktop", Tidy(sh.ExpandEnvironmentStrings("%USERPROFILE%")) _
+                 & "\Desktop")
+startup = Folder("Startup", Tidy(sh.ExpandEnvironmentStrings("%APPDATA%")) _
+                 & "\Microsoft\Windows\Start Menu\Programs\Startup")
 
 MakeLink desktop & "\КАССА.lnk", "", "kassa.ico", _
          "Запустить кассу Tau Till"
@@ -37,8 +39,9 @@ MakeLink desktop & "\ОСТАНОВИТЬ КАССУ.lnk", " --stop", "stop.ico"
 ' решили включить.
 Dim autoLink, want, fso
 Set fso = CreateObject("Scripting.FileSystemObject")
+If Not fso.FolderExists(startup) Then MakePath fso, startup
 autoLink = startup & "\TAU (автозапуск).lnk"
-want = sh.ExpandEnvironmentStrings("%TAU_AUTOSTART%")
+want = Tidy(sh.ExpandEnvironmentStrings("%TAU_AUTOSTART%"))
 If want = "%TAU_AUTOSTART%" Then want = ""
 
 If want = "1" Then
@@ -57,6 +60,47 @@ Else
     WScript.Echo "Ярлыки созданы, автозапуск остался выключенным."
 End If
 
+' Убрать с конца пути то, что там быть не должно: пробелы, закрывающую
+' обратную косую (установщик мог передать путь с ней) и невидимые символы.
+' Один такой хвост превращает C:\TauTill\kassa.ico в несуществующий файл, и
+' ярлык молча остаётся без значка или не создаётся вовсе.
+Function Tidy(s)
+    Dim c
+    Do While Len(s) > 0
+        c = Right(s, 1)
+        If c = " " Or c = "\" Or Asc(c) < 32 Then
+            s = Left(s, Len(s) - 1)
+        Else
+            Exit Do
+        End If
+    Loop
+    Tidy = s
+End Function
+
+' Куда класть ярлык.  Обычно это спрашивают у самой Windows, но список особых
+' папок реализован не везде одинаково, и на пустой ответ есть запасной путь.
+' С Vista имена этих папок на диске всегда английские, а по-русски они лишь
+' показываются, так что запасной путь верен и на русской Windows.
+Function Folder(what, fallback)
+    Dim p
+    p = ""
+    On Error Resume Next
+    p = sh.SpecialFolders(what)
+    On Error GoTo 0
+    If p = "" Then p = fallback
+    Folder = p
+End Function
+
+' Создать папку вместе со всеми родительскими.  На настоящей Windows папка
+' автозапуска есть всегда, но полагаться на это, когда ошибка выльется в
+' молча не включившийся автозапуск, не стоит.
+Sub MakePath(fso, path)
+    Dim parent
+    parent = fso.GetParentFolderName(path)
+    If parent <> "" And Not fso.FolderExists(parent) Then MakePath fso, parent
+    If Not fso.FolderExists(path) Then fso.CreateFolder path
+End Sub
+
 Sub MakeLink(linkPath, extraArgs, icon, note)
     Dim link
     Set link = sh.CreateShortcut(linkPath)
@@ -64,7 +108,9 @@ Sub MakeLink(linkPath, extraArgs, icon, note)
     link.TargetPath = dest & "\python\pythonw.exe"
     link.Arguments = """" & dest & "\app\launch.py""" & extraArgs
     link.WorkingDirectory = dest
-    link.IconLocation = dest & "\" & icon
+    ' Со значком обязательно нужен номер картинки внутри файла: без него
+    ' Windows значок иногда берёт, а иногда отказывается вовсе.
+    link.IconLocation = dest & "\" & icon & ",0"
     link.Description = note
     link.Save
 End Sub

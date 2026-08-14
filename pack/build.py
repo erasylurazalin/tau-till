@@ -224,7 +224,12 @@ def certificates(dest):
         say("список сертификатов не найден, обновления будут полагаться"
             " на системный")
         return
-    shutil.copy(src, dest / "cacert.pem")
+    out = dest / "cacert.pem"
+    shutil.copy(src, out)
+    # Системный список лежит доступным только для чтения, и права переезжают
+    # вместе с файлом.  На кассе это оборачивается тем, что повторная установка
+    # спотыкается: copy /Y поверх файла «только для чтения» не проходит.
+    out.chmod(0o644)
     count = src.read_text(errors="replace").count("BEGIN CERTIFICATE")
     say(f"сертификаты: {count} корневых, {src.stat().st_size // 1024} КБ")
 
