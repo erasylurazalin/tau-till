@@ -4,9 +4,16 @@
     python3 pack/release.py                 # без номера: только пересобрать список
 
 Что делает: проставляет номер версии, пересчитывает контрольные суммы всех
-файлов программы, кладёт их в update/version.json и делает коммит с меткой.
-После этого остаётся один `git push --follow-tags`, и касса в магазине увидит
-новую версию по кнопке ОБНОВИТЬ.
+файлов программы и кладёт их в update/version.json.  Дальше печатает точные
+команды git и на этом останавливается.  Коммит, метку и push я делаю сам,
+прочитав git status глазами.
+
+Коммит выпуска должен быть один и содержать ровно файлы программы вместе с
+пересчитанным списком.  Если список уедет на GitHub отдельно от файлов, для
+которых он посчитан, касса скачает их, не сойдётся контрольная сумма, и
+обновление откажется ставиться.  Поэтому в команде git add перечислены именно
+эти файлы и никакие другие, а если в дереве есть посторонние правки, скрипт
+ничего не трогает и говорит разобраться с ними сначала.
 
 Почему именно так, а не через выпуски GitHub с приложенными архивами: касса
 скачивает семь обычных файлов по прямым ссылкам на репозиторий.  Ни токенов,
@@ -23,6 +30,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from datetime import date
@@ -44,6 +52,11 @@ FILES = [
     ("index.html", None),
     ("pack/win/launch.py", "launch.py"),
 ]
+
+# Всё, что должно попасть в коммит выпуска: файлы программы и пересчитанный
+# для них список.  Ровно этот перечень уходит в git add, чтобы вместе с
+# версией случайно не уехало то, что я в тот день ещё дописывал.
+RELEASE_PATHS = [path for path, _ in FILES] + ["update/version.json"]
 
 
 def say(msg):
@@ -113,13 +126,49 @@ def manifest(number, notes):
     }
 
 
+def stray_changes():
+    """Что в дереве изменено помимо самого выпуска.
+
+    Возвращает два списка: правки в файлах, за которыми git следит, и файлы,
+    про которые он ещё не знает.  Первые выпуску мешают, вторые нет: в git add
+    они всё равно не попадут, но сказать о них стоит.
+
+    Читается с -z, иначе git берёт в кавычки и экранирует всё, что не ASCII,
+    а в этом проекте так выглядит половина имён.
+    """
+    changed, untracked = [], []
+    items = git("status", "--porcelain", "-z").stdout.split("\0")
+    i = 0
+    while i < len(items):
+        record = items[i]
+        i += 1
+        if not record:
+            continue
+        code, path = record[:2], record[3:]
+        if code[0] in "RC":
+            i += 1   # за переименованием отдельным полем идёт прежнее имя
+        if code == "??":
+            untracked.append(path)
+        elif path not in RELEASE_PATHS:
+            changed.append(path)
+    return sorted(changed), sorted(untracked)
+
+
 def main():
     ap = argparse.ArgumentParser(description="выпуск новой версии Tau Till")
     ap.add_argument("version", nargs="?", help="например 0.5.1")
     ap.add_argument("-m", "--notes", default="", help="что изменилось")
-    ap.add_argument("--no-commit", action="store_true",
-                    help="только обновить файлы, без коммита и метки")
     args = ap.parse_args()
+
+    have_git = (PROJECT / ".git").exists()
+    changed, untracked = stray_changes() if have_git else ([], [])
+    if changed:
+        say("в дереве есть правки, к выпуску не относящиеся:")
+        for path in changed:
+            say("    " + path)
+        say("их нужно сначала закоммитить отдельно или отложить через")
+        say("git stash, иначе номер версии уедет непонятно с чем")
+        return 1
 
     number = set_version(args.version) if args.version else current_version()
     say(f"версия: {number}")
@@ -133,29 +182,26 @@ def main():
     if man["base"]:
         say("касса будет брать их отсюда: " + man["base"])
 
-    if args.no_commit:
+    if not have_git:
+        say("git в проекте ещё не заведён, команды выпуска печатать не из чего")
         return 0
+    if untracked:
+        say("git пока не знает про эти файлы, в выпуск они не пойдут:")
+        for path in untracked:
+            say("    " + path)
 
-    if not (PROJECT / ".git").exists():
-        say("git в проекте ещё не заведён, коммит пропущен")
-        return 0
-
-    git("add", "-A")
-    if not git("status", "--porcelain").stdout.strip():
-        say("менять нечего, всё уже закоммичено")
-        return 0
     message = f"Версия {number}" + (f": {args.notes}" if args.notes else "")
-    git("commit", "-m", message)
     tag = "v" + number
-    existing = git("tag", "-l", tag).stdout.strip()
-    if existing:
-        say(f"метка {tag} уже есть, оставляю как есть")
-    else:
-        git("tag", "-a", tag, "-m", message)
-        say(f"метка: {tag}")
-    say("коммит готов")
     print()
-    print("  Осталось отправить это на GitHub:")
+    print("  Дальше руками, прочитав сначала git status:")
+    print()
+    print("      git status -sb")
+    print("      git add " + " ".join(RELEASE_PATHS))
+    print("      git commit -m " + shlex.quote(message))
+    if git("tag", "-l", tag).stdout.strip():
+        print(f"      # метка {tag} уже стоит, второй раз не нужно")
+    else:
+        print(f"      git tag -a {tag} -m " + shlex.quote(message))
     print("      git push --follow-tags")
     print()
     print("  И сказать родителям нажать ОБНОВИТЬ КАССУ.")
