@@ -53,10 +53,12 @@ FILES = [
     ("pack/win/launch.py", "launch.py"),
 ]
 
-# Всё, что должно попасть в коммит выпуска: файлы программы и пересчитанный
-# для них список.  Ровно этот перечень уходит в git add, чтобы вместе с
-# версией случайно не уехало то, что я в тот день ещё дописывал.
-RELEASE_PATHS = [path for path, _ in FILES] + ["update/version.json"]
+# Всё, что должно попасть в коммит выпуска: файлы программы, пересчитанный
+# для них список и README, в котором номер тоже проставлен.  Ровно этот
+# перечень уходит в git add, чтобы вместе с версией случайно не уехало то,
+# что я в тот день ещё дописывал.
+RELEASE_PATHS = ([path for path, _ in FILES]
+                 + ["update/version.json", "README.md"])
 
 
 def say(msg):
@@ -89,14 +91,50 @@ def repo_base():
 
 
 def set_version(number):
-    """Проставить номер в version.py, единственное место, где он живёт."""
+    """Проставить номер в version.py, единственное место, где он живёт.
+
+    Заодно подтягивается пример в подсказке к label().  Сам ярлык на экране
+    собирается из VERSION и не устаревает никогда, но пример рядом с ним
+    списан руками, и прошлый номер в нём сбивает с толку того, кто открыл файл
+    посмотреть, как эта надпись выглядит.
+    """
     path = PROJECT / "version.py"
     text = path.read_text(encoding="utf-8")
     new = re.sub(r'VERSION = "[^"]+"', f'VERSION = "{number}"', text, count=1)
     if new == text and f'VERSION = "{number}"' not in text:
         raise SystemExit("не нашёл строку VERSION в version.py")
+
+    name = re.search(r'^NAME = "([^"]+)"', new, re.M)
+    stage = re.search(r'^STAGE = "([^"]*)"', new, re.M)
+    if name:
+        # Ровно то, что вернёт label(): имя, номер и, если она есть, приставка.
+        sample = name.group(1) + " " + number
+        if stage and stage.group(1):
+            sample += " " + stage.group(1)
+        new = re.sub("«%s[^»]*»" % re.escape(name.group(1)),
+                     "«%s»" % sample, new)
     path.write_text(new, encoding="utf-8")
     return number
+
+
+def sync_readme(number):
+    """Подтянуть номер в строке Status: README.md.
+
+    README не едет на кассу, но лежит на GitHub, и версия в нём расходится с
+    меткой выпуска ровно до тех пор, пока кто-нибудь не заметит.  Трогается
+    только сам номер: слово рядом с ним написано по-английски и меняться не
+    должно.
+    """
+    path = PROJECT / "README.md"
+    if not path.exists():
+        return False
+    text = path.read_text(encoding="utf-8")
+    new = re.sub(r"(?m)^(\*\*Status:\*\*\s*v)\d+(?:\.\d+)*",
+                 r"\g<1>" + number, text, count=1)
+    if new == text:
+        return False
+    path.write_text(new, encoding="utf-8")
+    return True
 
 
 def current_version():
@@ -170,8 +208,12 @@ def main():
         say("git stash, иначе номер версии уедет непонятно с чем")
         return 1
 
-    number = set_version(args.version) if args.version else current_version()
+    # Номер проставляется даже когда он не менялся: заодно подтягиваются
+    # места, где он написан словами, а не собирается из VERSION.
+    number = set_version(args.version or current_version())
     say(f"версия: {number}")
+    if sync_readme(number):
+        say("номер в README.md подтянут")
 
     UPDATE.mkdir(exist_ok=True)
     man = manifest(number, args.notes)
