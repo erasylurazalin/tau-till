@@ -1,13 +1,13 @@
 {
-  "version": "0.5.0",
-  "released": "2026-08-15",
+  "version": "0.5.1",
+  "released": "2026-08-16",
   "notes": "",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
       "path": "server.py",
-      "sha256": "acf6d7bcdf7ce9167ad359c223fb1bd56f3149bf8fb7f884c4c19235639a9e21",
-      "size": 41636
+      "sha256": "79de5a7dc12808e5a9eea4327196fa7ad51cffb597c8089db97bba9820d76ee1",
+      "size": 42697
     },
     {
       "path": "db.py",
@@ -31,18 +31,18 @@
     },
     {
       "path": "version.py",
-      "sha256": "e0e04fea6d36e24700ac0015d27b649e56506e269e307e45b48412eda525b23f",
+      "sha256": "9fbd6ff0d35d1d4cce361cac842b2a05c3f08e514879ea6f38936d67778138af",
       "size": 869
     },
     {
       "path": "index.html",
-      "sha256": "187b1d3f9762d19e7e5021f2bee4845cfd067e03372e1a68ca3726e064b3944a",
-      "size": 105875
+      "sha256": "4849b685013b1dba857358b934be9c73036a8044461e54f99fc9579e066854df",
+      "size": 106347
     },
     {
       "path": "pack/win/launch.py",
-      "sha256": "a030814e47bcc8ef6809318dfab80704223299c9a6b4467981251eb611235111",
-      "size": 30839,
+      "sha256": "241a7aa9ebd5d0e0653b07f6390677814a3d2b6776d1491b6c6cedc52d1e140f",
+      "size": 32120,
       "as": "launch.py"
     }
   ]
