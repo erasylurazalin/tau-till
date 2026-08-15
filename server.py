@@ -438,6 +438,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(self.receive(con, self._body()))
             elif u.path == "/api/count":
                 self._json(self.count(con, self._body()))
+            elif u.path == "/api/minimize":
+                self._json(self.minimize())
             elif u.path == "/api/quit":
                 self._json(self.quit())
             elif u.path == "/api/update":
@@ -526,6 +528,25 @@ class Handler(BaseHTTPRequestHandler):
         return {"ok": True, "shift": closed, "top": top,
                 "printed": printed, "print_error": err,
                 "backup": backup, "backup_error": backup_err}
+
+    def minimize(self):
+        """Свернуть браузер, показать рабочий стол Windows.
+
+        Same problem as quit() -- no window frame, no keyboard, no way out of
+        a full-screen kiosk browser from inside the page -- but this exit is
+        meant to be temporary rather than final.  The server has no window
+        handle of its own, so it only leaves a note next to the database, the
+        same way an update request does, and the launcher that actually
+        started the browser is the one watching for it and doing the
+        minimizing.  On a dev run with no launcher attached the note is
+        simply never picked up.
+        """
+        flag = db.DB_PATH.parent / "minimize-requested"
+        try:
+            flag.write_text(db.now_iso(), encoding="utf-8")
+        except OSError as e:
+            raise ValueError(f"не удалось запросить сворачивание: {e}")
+        return {"ok": True}
 
     def quit(self):
         """Выключение кассы с самого экрана.

@@ -19,6 +19,7 @@ them and stops them again.
 а каждая беда заканчивается окном с кнопкой ОК, достаточно большой для пальца.
 """
 import ctypes
+from ctypes import wintypes
 import hashlib
 import json
 import os
@@ -41,6 +42,7 @@ LOGS = ROOT / "logs"
 STATE = DATA / "running.json"
 SETTINGS = ROOT / "settings.json"
 UPDATE_FLAG = DATA / "update-requested"
+MINIMIZE_FLAG = DATA / "minimize-requested"
 # Свой список корневых сертификатов.  Лежит рядом с программой, а не внутри
 # папки app: обновление подменяет app целиком, и остаться без сертификатов
 # посреди обновления значит потерять возможность обновляться дальше.
@@ -344,6 +346,31 @@ def start_chrome(cfg):
     return proc.pid
 
 
+def minimize_chrome(pid):
+    """Свернуть окно браузера по номеру процесса.
+
+    Chrome is several processes, but only the one launched directly here owns
+    a top-level window; the renderer and GPU children EnumWindows never sees.
+    Nothing raises if the window is already gone -- the next supervise() tick
+    just finds the process dead and moves on.
+    """
+    user32 = ctypes.windll.user32
+    found = []
+
+    def each(hwnd, _lparam):
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        if owner.value == pid and user32.IsWindowVisible(hwnd):
+            found.append(hwnd)
+        return True
+
+    proc = ctypes.WINFUNCTYPE(
+        ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(each)
+    user32.EnumWindows(proc, 0)
+    for hwnd in found:
+        user32.ShowWindow(hwnd, 6)   # SW_MINIMIZE
+
+
 # --- обновление -----------------------------------------------------------
 def local_version():
     """Версия, которая сейчас лежит в папке app.
@@ -557,6 +584,14 @@ def supervise(server_pid, chrome_pid, cfg):
     log("касса работает, версия %s" % local_version())
     while True:
         time.sleep(1.0)
+        if MINIMIZE_FLAG.exists():
+            try:
+                MINIMIZE_FLAG.unlink()
+            except OSError:
+                pass
+            if alive(chrome_pid):
+                log("сворачиваю браузер по запросу с экрана")
+                minimize_chrome(chrome_pid)
         if not alive(chrome_pid):
             log("браузер закрыт")
             kill(server_pid, "сервер")

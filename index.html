@@ -742,6 +742,8 @@
           <span id="x-last2"></span></button>
         <button id="x-list">ВСЕ ЧЕКИ ЗА ДЕНЬ
           <span>печать и отмена любого чека</span></button>
+        <button id="x-minimize">СВЕРНУТЬ
+          <span>показать рабочий стол Windows</span></button>
       </div>
     </div>
     <div class="payfoot" style="grid-template-columns:1fr">
@@ -2321,6 +2323,13 @@ $('#x-list').onclick = () => {
   $('#extrasmodal').hidden = true;
   showTab('day');
   $('#d-receipts').scrollIntoView({behavior: 'smooth', block: 'center'});
+};
+// The till has no window frame to click and no keyboard to press Win+D, so
+// this is the only way off the till and onto the desktop without quitting.
+$('#x-minimize').onclick = async () => {
+  $('#extrasmodal').hidden = true;
+  const res = await postJSON('/api/minimize', {});
+  if (res.error) toast('Ошибка: ' + res.error, true);
 };
 
 // ---------- void a receipt ----------
