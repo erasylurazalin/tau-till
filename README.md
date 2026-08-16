@@ -7,7 +7,7 @@ It runs on the computer the shop already owns: a touchscreen all-in-one with
 Windows 7, 2 GB of RAM and no keyboard, operated by my elderly parents. That is
 the entire design brief, and it decided most of what is below.
 
-**Status:** v0.5.2 beta, installed in the shop, printing real receipts.
+**Status:** v0.5.3 beta, installed in the shop, printing real receipts.
 
 ## What it does
 

@@ -1132,10 +1132,14 @@ function addItem(p) {
     ex.qty += 1;
     sel = cart.indexOf(ex);
   } else {
-    // A genuinely new item does not steal the selection: only the first item
-    // into an empty cart becomes selected (clampSel turns sel = -1 into 0).
+    // Новый товар тоже забирает выбор на себя.  Кнопки КОЛ-ВО, СКИДКА и
+    // УДАЛИТЬ работают по выбранной строке, и после сканирования рука тянется
+    // именно к ним: чаще всего чтобы отменить то, что только что пробилось по
+    // ошибке.  Пока выбор оставался на прежней строке, УДАЛИТЬ убирало из чека
+    // совсем не тот товар.
     cart.push({product_id: p.id, name: p.name, price: p.price,
                unit: p.unit, qty: 1, disc: 0, stock: p.stock});
+    sel = cart.length - 1;
   }
   // Only warn about a balance we actually know: an uncounted product must not
   // nag on every scan, and a price of 0 is the mistake that really matters.
@@ -1171,6 +1175,40 @@ $('#scan').addEventListener('keydown', async e => {
   }
   e.target.value = '';
 });
+
+// Сканер это клавиатура: он «набирает» штрихкод туда, где сейчас стоит фокус,
+// и в конце жмёт Enter.  Стоит перед сканированием нажать любую кнопку, и
+// фокус остаётся на ней, а Enter от сканера нажимает её второй раз.  Хуже
+// всего это выглядит на УДАЛИТЬ: вместо нового товара из чека пропадает
+// выбранный.  Настоящей клавиатуры у кассы нет, значит на экране ПРОДАЖА любой
+// набор с клавиш это заведомо сканер, и его надо увести в поле поиска.
+const inTextField = el =>
+  !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+const anyModalOpen = () => !!document.querySelector('.modal:not([hidden])');
+
+document.addEventListener('keydown', e => {
+  // Вход и модальные окна разбираются своими обработчиками, и фокус там уже
+  // стоит там, где нужно.
+  if (!$('#login').hidden || anyModalOpen()) return;
+  if ($('#tab-sale').hidden) return;
+  if (inTextField(e.target)) return;
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+  const scan = $('#scan');
+  if (e.key === 'Enter') {
+    // Enter пришёл мимо поля: гасим его, чтобы он не нажал кнопку под фокусом.
+    e.preventDefault();
+    scan.focus();
+  } else if (e.key.length === 1) {
+    e.preventDefault();
+    scan.focus();
+    // Набор начался снаружи поля, значит это новый штрихкод, а не продолжение
+    // чего-то недопечатанного.  Дописывать к остаткам прошлого поиска нельзя:
+    // получится код, которого нет, и касса полезет заводить новый товар.
+    scan.value = e.key;
+  }
+  // Остальные символы штрихкода попадут в поле сами: фокус уже там.
+}, true);
 
 $('#qty-plus').onclick = () => { if (sel >= 0) { cart[sel].qty++; render(); } };
 $('#qty-minus').onclick = () => {

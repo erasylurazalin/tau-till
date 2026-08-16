@@ -1,7 +1,7 @@
 {
-  "version": "0.5.2",
+  "version": "0.5.3",
   "released": "2026-08-16",
-  "notes": "количество меняется нажатием на само число в чеке",
+  "notes": "сканер больше не жмёт кнопки мимо поиска, новый товар в чеке сразу выбран",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "05bf28238bec487d16a6a9c55a1acafa375fe9c64c1ac68d408f326f98eff792",
+      "sha256": "d2565f7410ceb74373f5df544d320b4080c3bb1a72f3cafbe616353d155ee0b8",
       "size": 869
     },
     {
       "path": "index.html",
-      "sha256": "6407c1b76eb74bf060f0c48d3effaf04264ea04cc4070b4d70ef8afc6fe65622",
-      "size": 107570
+      "sha256": "d421c556757ff87abfadc260814cc4433a3da9c351932ce3231ecff2eb6a0461",
+      "size": 110284
     },
     {
       "path": "pack/win/launch.py",
