@@ -8,7 +8,7 @@
 её ещё есть кому чинить каждый день.
 """
 
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 STAGE = "бета"
 
 NAME = "Tau Till"
@@ -16,5 +16,5 @@ NAME_SHORT = "TAU"
 
 
 def label():
-    """То, что видит человек: «Tau Till 0.5.0 бета»."""
+    """То, что видит человек: «Tau Till 0.5.2 бета»."""
     return f"{NAME} {VERSION}" + (f" {STAGE}" if STAGE else "")

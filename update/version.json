@@ -1,7 +1,7 @@
 {
-  "version": "0.5.1",
+  "version": "0.5.2",
   "released": "2026-08-16",
-  "notes": "",
+  "notes": "количество меняется нажатием на само число в чеке",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "9fbd6ff0d35d1d4cce361cac842b2a05c3f08e514879ea6f38936d67778138af",
+      "sha256": "05bf28238bec487d16a6a9c55a1acafa375fe9c64c1ac68d408f326f98eff792",
       "size": 869
     },
     {
       "path": "index.html",
-      "sha256": "4849b685013b1dba857358b934be9c73036a8044461e54f99fc9579e066854df",
-      "size": 106347
+      "sha256": "6407c1b76eb74bf060f0c48d3effaf04264ea04cc4070b4d70ef8afc6fe65622",
+      "size": 107570
     },
     {
       "path": "pack/win/launch.py",

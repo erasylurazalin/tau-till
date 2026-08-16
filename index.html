@@ -77,6 +77,13 @@
      white text on a white chip -- i.e. invisible. */
   td.disc.has b, tr.sel td.disc.has b{
      background:var(--warn);border-color:var(--warn);color:#fff}
+  /* Количество нажимается так же, как скидка: родители сами до этого дошли,
+     раз обе цифры стоят в строке рядом.  Поэтому и выглядит оно так же,
+     плашкой, а не просто текстом. */
+  td.qty{cursor:pointer}
+  td.qty b{display:inline-block;padding:3px 7px;border-radius:4px;white-space:nowrap;
+     background:#e3f4f8;border:1px solid var(--accent);font-variant-numeric:tabular-nums}
+  tr.sel td.qty b{background:#fff}
   .strike{color:var(--muted);text-decoration:line-through;font-size:12px}
   .hint{color:var(--muted);font-size:13px;padding:24px;text-align:center}
   form.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;padding:14px}
@@ -336,7 +343,7 @@
         <thead><tr>
           <th style="width:36px">#</th><th>НАИМЕНОВАНИЕ</th>
           <th class="num" style="width:110px">ЦЕНА</th>
-          <th class="num" style="width:90px">КОЛ-ВО</th>
+          <th class="num" style="width:110px">КОЛ-ВО</th>
           <th class="num" style="width:110px">СКИДКА</th>
           <th class="num" style="width:120px">СУММА</th>
         </tr></thead>
@@ -1088,7 +1095,7 @@ function render() {
     <tr class="${i === sel ? 'sel' : ''}" data-i="${i}">
       <td>${i + 1}</td><td>${it.name}</td>
       <td class="num">${money(it.price)} тг</td>
-      <td class="num">${it.qty} ${it.unit}</td>
+      <td class="num qty" data-qty="${i}"><b>${it.qty} ${it.unit}</b></td>
       <td class="num disc ${it.disc ? 'has' : ''}" data-disc="${i}"
           ><b>${money(it.disc || 0)} %</b></td>
       <td class="num">${it.disc
@@ -1103,6 +1110,14 @@ function render() {
     sel = +td.dataset.disc;
     render();
     openDisc('line');
+  });
+  // То же самое для количества: нажатие на «1 шт» открывает тот же numpad,
+  // что и кнопка КОЛ-ВО.
+  tb.querySelectorAll('td.qty').forEach(td => td.onclick = e => {
+    e.stopPropagation();
+    sel = +td.dataset.qty;
+    render();
+    editQty(sel);
   });
   $('#cart-empty').hidden = cart.length > 0;
   $('#count').textContent = cart.length;
@@ -1243,10 +1258,18 @@ function confirmNum() {
 $('#n-input').addEventListener('input', updateNum);
 
 // ---------- quantity ----------
+// Строку запоминаем номером, а не через sel: пока открыт numpad, выбор
+// поменяться не может, но так правка точно уедет в ту строку, по которой
+// нажали.
+function editQty(i) {
+  const it = cart[i];
+  if (!it) return;
+  openNum(`КОЛИЧЕСТВО: ${it.name}`, it.qty, v => { it.qty = v; render(); });
+}
+
 $('#qty-set').onclick = () => {
   if (sel < 0) return toast('Выберите товар в чеке', true);
-  const it = cart[sel];
-  openNum(`КОЛИЧЕСТВО: ${it.name}`, it.qty, v => { cart[sel].qty = v; render(); });
+  editQty(sel);
 };
 
 // ---------- universal item ----------
