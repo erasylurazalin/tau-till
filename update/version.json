@@ -1,7 +1,7 @@
 {
-  "version": "0.5.3",
+  "version": "0.5.4",
   "released": "2026-08-16",
-  "notes": "сканер больше не жмёт кнопки мимо поиска, новый товар в чеке сразу выбран",
+  "notes": "чек прокручивается к пробитому товару, остатки на АДМИН свёрнуты",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "d2565f7410ceb74373f5df544d320b4080c3bb1a72f3cafbe616353d155ee0b8",
+      "sha256": "37612b277d25e53e0e5ae13b2af60af2fa83a5d754003c1e0a6aa567c26c4fc8",
       "size": 869
     },
     {
       "path": "index.html",
-      "sha256": "d421c556757ff87abfadc260814cc4433a3da9c351932ce3231ecff2eb6a0461",
-      "size": 110284
+      "sha256": "3b9a1c294061a3fb1f16328497f3a88c834fa348f4082b38530f1390cfe3e04e",
+      "size": 114770
     },
     {
       "path": "pack/win/launch.py",

@@ -106,6 +106,20 @@
   .panel > .actions button{padding:11px 16px;background:var(--panel);border:1px solid var(--line);border-radius:6px;font:600 13px system-ui;cursor:pointer}
   .panel > .actions button.on{background:#e3f4f8;border-color:var(--accent)}
   #s-info{padding:8px 14px 0;text-align:left}
+  /* ОСТАТКИ раскрываются нажатием и по умолчанию свёрнуты.  Пока список
+     товаров стоял на странице всегда, он уводил ОБНОВИТЬ КАССУ и ВЫКЛЮЧИТЬ
+     КАССУ далеко вниз, и до них приходилось долго листать.  ВЫЙТИ по этой же
+     причине живёт в самой шапке: свернётся список, а кнопка останется. */
+  .foldtop{display:flex;align-items:center;gap:8px;padding:6px 10px 6px 4px;
+     border-bottom:1px solid var(--line)}
+  button.fold{flex:1;display:flex;align-items:center;gap:10px;text-align:left;
+     background:none;border:0;border-radius:6px;cursor:pointer;padding:10px;
+     font:600 13px system-ui;letter-spacing:.5px;color:var(--muted)}
+  button.fold .chev{color:var(--accent);font-size:12px;display:inline-block}
+  button.fold[aria-expanded="true"] .chev{transform:rotate(90deg)}
+  .foldnote{margin-left:auto;font-weight:400;letter-spacing:0;font-size:12px}
+  .foldtop #lock{flex:none;padding:11px 16px;background:var(--panel);
+     border:1px solid var(--line);border-radius:6px;font:600 13px system-ui;cursor:pointer}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px}
   .card .k{font-size:12px;color:var(--muted);letter-spacing:.4px}
@@ -435,32 +449,40 @@
       </table>
     </div>
     <div class="panel" id="stockpanel">
-      <h3>ОСТАТКИ</h3>
-      <div class="actions">
-        <input id="s-find" placeholder="Поиск по названию или штрихкоду"
-               autocomplete="off" style="flex:1" data-kbd>
-        <button id="s-uncounted" type="button">ТОЛЬКО НЕ ПОСЧИТАННЫЕ</button>
-        <button id="s-nocost" type="button">БЕЗ ЗАКУП. ЦЕНЫ</button>
-        <button id="s-delmode" type="button">РЕЖИМ УДАЛЕНИЯ</button>
+      <div class="foldtop">
+        <button id="s-toggle" class="fold" type="button" aria-expanded="false">
+          <span class="chev">▶</span>ОСТАТКИ
+          <span class="foldnote" id="s-fold-note">нажмите, чтобы открыть список товаров</span>
+        </button>
         <button id="lock" type="button">ВЫЙТИ</button>
       </div>
 
-      <!-- selection bar, only in deletion mode -->
-      <div class="selbar delonly">
-        <span class="selcount" id="s-selcount">Выбрано: 0</span>
-        <button id="s-all" type="button">ВЫБРАТЬ ВСЁ НАЙДЕННОЕ</button>
-        <button id="s-none" type="button">СНЯТЬ ВЫДЕЛЕНИЕ</button>
-        <button id="s-delete" class="godelete" type="button" disabled>УДАЛИТЬ ВЫБРАННОЕ</button>
-      </div>
+      <div id="stockbody" hidden>
+        <div class="actions">
+          <input id="s-find" placeholder="Поиск по названию или штрихкоду"
+                 autocomplete="off" style="flex:1" data-kbd>
+          <button id="s-uncounted" type="button">ТОЛЬКО НЕ ПОСЧИТАННЫЕ</button>
+          <button id="s-nocost" type="button">БЕЗ ЗАКУП. ЦЕНЫ</button>
+          <button id="s-delmode" type="button">РЕЖИМ УДАЛЕНИЯ</button>
+        </div>
 
-      <div class="hint" id="s-info"></div>
-      <table>
-        <thead><tr><th class="delonly pick"></th>
-          <th>НАИМЕНОВАНИЕ</th><th>ШТРИХКОД</th>
-          <th class="num">ЗАКУП.</th>
-          <th class="num">ЦЕНА</th><th class="num">ОСТАТОК</th></tr></thead>
-        <tbody id="stock"></tbody>
-      </table>
+        <!-- selection bar, only in deletion mode -->
+        <div class="selbar delonly">
+          <span class="selcount" id="s-selcount">Выбрано: 0</span>
+          <button id="s-all" type="button">ВЫБРАТЬ ВСЁ НАЙДЕННОЕ</button>
+          <button id="s-none" type="button">СНЯТЬ ВЫДЕЛЕНИЕ</button>
+          <button id="s-delete" class="godelete" type="button" disabled>УДАЛИТЬ ВЫБРАННОЕ</button>
+        </div>
+
+        <div class="hint" id="s-info"></div>
+        <table>
+          <thead><tr><th class="delonly pick"></th>
+            <th>НАИМЕНОВАНИЕ</th><th>ШТРИХКОД</th>
+            <th class="num">ЗАКУП.</th>
+            <th class="num">ЦЕНА</th><th class="num">ОСТАТОК</th></tr></thead>
+          <tbody id="stock"></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- The till runs full screen on a machine with no keyboard, so this is
@@ -959,7 +981,9 @@ function showTab(name) {
   document.querySelectorAll('nav button').forEach(
     x => x.classList.toggle('on', x.dataset.tab === name));
   TABS.forEach(t => $('#tab-' + t).hidden = (t !== name));
-  if (name === 'admin') { loadStock(); loadCashiers(); }
+  // Список остатков сворачивается при каждом заходе, чтобы страница всегда
+  // открывалась одинаково и кнопки внизу были сразу под рукой.
+  if (name === 'admin') { setStockOpen(false); loadCashiers(); }
   if (name === 'day') loadDay();
   if (name === 'sale') $('#scan').focus();
   if (name === 'receive') $('#r-barcode').focus();
@@ -1122,6 +1146,28 @@ function render() {
   $('#cart-empty').hidden = cart.length > 0;
   $('#count').textContent = cart.length;
   $('#total').textContent = money(cartNet());
+  revealRow(sel);
+}
+
+// Длинный чек не влезает на экран, а новый товар всегда уходит вниз, за край.
+// Прокручиваем к выбранной строке, а не просто в самый низ: выбранная это и
+// есть только что пробитая, и заодно так же находится строка, к которой
+// вернулись повторным сканированием.
+//
+// Двигаем список только когда строки действительно не видно.  Иначе список
+// дёргался бы при каждой перерисовке, в том числе когда кассир сам отлистал
+// чек вверх, чтобы что-то посмотреть.
+function revealRow(i) {
+  if (i < 0) return;
+  const box = $('.cart'), row = box.querySelector(`tr[data-i="${i}"]`);
+  if (!row) return;
+  const head = box.querySelector('thead');
+  const b = box.getBoundingClientRect(), r = row.getBoundingClientRect();
+  // Шапка таблицы залипшая: она висит поверх списка, и строка, заехавшая под
+  // неё, формально видна, а на деле закрыта.
+  const top = b.top + (head ? head.getBoundingClientRect().height : 0);
+  if (r.top < top) box.scrollTop -= top - r.top;
+  else if (r.bottom > b.bottom) box.scrollTop += r.bottom - b.bottom;
 }
 
 function addItem(p) {
@@ -2081,6 +2127,22 @@ $('#del-go').onclick = async () => {
 
 $('#del-close').onclick = () => { $('#delmodal').hidden = true; };
 
+// Список товаров свёрнут, пока его не открыли, и пока он свёрнут, товары не
+// запрашиваются вовсе: на АДМИН заходят чаще всего не ради них, а ради
+// инвентаризации, кассиров или кнопок внизу страницы.
+let stockOpen = false;
+
+function setStockOpen(open) {
+  stockOpen = open;
+  $('#stockbody').hidden = !open;
+  $('#s-toggle').setAttribute('aria-expanded', open ? 'true' : 'false');
+  $('#s-fold-note').textContent = open
+    ? 'нажмите, чтобы свернуть список' : 'нажмите, чтобы открыть список товаров';
+  if (open) loadStock();
+}
+
+$('#s-toggle').onclick = () => setStockOpen(!stockOpen);
+
 let stockOnlyUncounted = false, stockOnlyNoCost = false;
 $('#s-uncounted').onclick = () => {
   stockOnlyUncounted = !stockOnlyUncounted;
@@ -2106,6 +2168,9 @@ function stockParams() {
 }
 
 async function loadStock() {
+  // Приёмка и инвентаризация обновляют список после каждой записи.  Пока он
+  // свёрнут, обновлять нечего: setStockOpen перечитает его при раскрытии.
+  if (!stockOpen) return;
   const d = await (await fetch('/api/products?' + stockParams())).json();
   $('#stock').innerHTML = d.rows.map(r => `<tr data-id="${r.id}"
       class="${picked.has(r.id) ? 'picked' : ''}">
