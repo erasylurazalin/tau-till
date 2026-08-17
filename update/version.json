@@ -1,7 +1,7 @@
 {
-  "version": "0.5.4",
-  "released": "2026-08-16",
-  "notes": "чек прокручивается к пробитому товару, остатки на АДМИН свёрнуты",
+  "version": "0.5.5",
+  "released": "2026-08-17",
+  "notes": "клавиатура закрывается нажатием мимо неё",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "37612b277d25e53e0e5ae13b2af60af2fa83a5d754003c1e0a6aa567c26c4fc8",
+      "sha256": "0eed211666003cc7a9190ec9ae5e6e74240deee74dd7c3d0fbdc3143696177d3",
       "size": 869
     },
     {
       "path": "index.html",
-      "sha256": "3b9a1c294061a3fb1f16328497f3a88c834fa348f4082b38530f1390cfe3e04e",
-      "size": 114770
+      "sha256": "8452c1023b3990d0d7ed01c262affa7fc9c8c21fadbb183d513a6da728da3b60",
+      "size": 116602
     },
     {
       "path": "pack/win/launch.py",

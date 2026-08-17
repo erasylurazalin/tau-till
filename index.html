@@ -1956,6 +1956,29 @@ document.addEventListener('focusin', e => {
     closeKbd();
 });
 
+// Нажатие мимо клавиатуры её закрывает.  Одного focusin выше не хватало:
+// фокус переносят только поля, а нажатие по пустому месту панели или по
+// обычной кнопке его никуда не переносит, и клавиатура оставалась висеть на
+// пол-экрана поверх всего остального.
+//
+// Слушаем именно click, а не касание: клавиатура занимает низ экрана, и если
+// убирать её в момент, когда палец только коснулся, вёрстка поедет прямо
+// под пальцем и нажатие уйдёт не в ту кнопку.  К моменту click нажатие уже
+// состоялось, и закрывать безопасно.  Фаза перехвата нужна, чтобы обработчики
+// самих кнопок не могли отменить закрытие своим stopPropagation.
+document.addEventListener('click', e => {
+  if (!kbdTarget) return;
+  const t = e.target;
+  if (!t || !t.closest) return;
+  if (t === kbdTarget) return;              // поле, для которого она и открыта
+  if (t.closest('#kbd')) return;            // сами клавиши
+  if (t.closest('#scan-kbd')) return;       // АБВ открывает её себе сам
+  // Переход на другое такое же поле: клавиатура не закрывается, а переезжает,
+  // иначе она мигала бы при каждом переходе между полями приёмки.
+  if (t.closest('[data-kbd], [data-num]')) return;
+  closeKbd();
+}, true);
+
 // ---------- two-tap confirmation ----------
 // Destructive buttons ask a second time in place, never through a browser
 // dialog: the operator sees what they are about to remove while confirming.
