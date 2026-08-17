@@ -1,7 +1,7 @@
 {
-  "version": "0.5.5",
+  "version": "0.5.6",
   "released": "2026-08-17",
-  "notes": "клавиатура закрывается нажатием мимо неё",
+  "notes": "понятное сообщение и повтор, когда GitHub отвечает 429",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
@@ -31,7 +31,7 @@
     },
     {
       "path": "version.py",
-      "sha256": "0eed211666003cc7a9190ec9ae5e6e74240deee74dd7c3d0fbdc3143696177d3",
+      "sha256": "e0720c18b6176ae993d477a7ac931deb4e85c12011e9026c7ada7f563d93a4f4",
       "size": 869
     },
     {
@@ -41,8 +41,8 @@
     },
     {
       "path": "pack/win/launch.py",
-      "sha256": "241a7aa9ebd5d0e0653b07f6390677814a3d2b6776d1491b6c6cedc52d1e140f",
-      "size": 32120,
+      "sha256": "557804efe0e5cb4576da377c6a6516bd1afb8e8091431a6164939fbb3a1d5caa",
+      "size": 34688,
       "as": "launch.py"
     }
   ]

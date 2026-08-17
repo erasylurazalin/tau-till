@@ -30,6 +30,7 @@ import ssl
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -393,23 +394,63 @@ def newer(remote, local):
     return parts(remote) > parts(local)
 
 
-def https_get(url, timeout=60):
+def too_many(err):
+    """Отказ из-за числа запросов, а не из-за самого файла."""
+    return getattr(err, "code", None) == 429
+
+
+def retry_wait(err, default):
+    """Сколько ждать перед следующей попыткой, по подсказке сервера.
+
+    Ждать долго нельзя: к этому моменту касса уже остановлена, и каждая
+    секунда это секунда, когда в магазине нечем пробить чек.  Поэтому что бы
+    сервер ни просил, дольше пятнадцати секунд не ждём, а честно сдаёмся и
+    предлагаем нажать ОБНОВИТЬ КАССУ попозже.
+    """
+    try:
+        asked = int((err.headers or {}).get("Retry-After", ""))
+    except (TypeError, ValueError):
+        asked = 0
+    return max(1, min(15, asked or default))
+
+
+def https_get(url, timeout=60, tries=3):
     """Скачать по HTTPS с проверкой подлинности сайта.
 
     Список корневых сертификатов везём свой.  На Windows 7, которую годами не
     обновляли, системный список отстал от жизни, и проверка может провалиться
     на совершенно исправном сервере.
+
+    GitHub считает запросы с одного интернет-адреса и, когда их набирается
+    много, отвечает 429 вместо файла.  Набирается это быстрее, чем кажется:
+    одно обновление это девять запросов (список и восемь файлов), а в день с
+    несколькими выпусками их выходит несколько десятков.  Пара повторов
+    вытаскивает случайный отказ, а если магазину действительно закрыли
+    доступ на час, повторы не помогут, и лучше сказать об этом словами.
     """
     ctx = (ssl.create_default_context(cafile=str(CA_FILE))
            if CA_FILE.exists() else ssl.create_default_context())
     # Метка времени в адресе: раздача GitHub кэширует файлы на несколько минут,
     # а обновление обычно ставят сразу после выпуска.
     sep = "&" if "?" in url else "?"
-    req = urllib.request.Request(
-        url + sep + "t=" + str(int(time.time())),
-        headers={"User-Agent": "TauTill/" + local_version()})
-    with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
-        return r.read()
+    for attempt in range(tries):
+        req = urllib.request.Request(
+            url + sep + "t=" + str(int(time.time())),
+            headers={"User-Agent": "TauTill/" + local_version()})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
+                return r.read()
+        except urllib.error.HTTPError as e:
+            if not too_many(e):
+                raise
+            if attempt == tries - 1:
+                raise OSError(
+                    "GitHub временно ограничил загрузки с этого интернет-адреса. "
+                    "Это проходит само. Нажмите ОБНОВИТЬ КАССУ ещё раз через "
+                    "полчаса, касса пока продолжит работать как обычно.")
+            wait = retry_wait(e, 3 * (attempt + 1))
+            log("GitHub ответил 429, жду %d с и пробую снова" % wait)
+            time.sleep(wait)
 
 
 def remote_manifest(cfg):
