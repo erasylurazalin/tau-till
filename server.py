@@ -209,6 +209,9 @@ class Handler(BaseHTTPRequestHandler):
                         "uncounted": tot["u"], "nocost": tot["nc"],
                         "noprice": tot["np"]})
 
+        elif u.path == "/api/quick":
+            return self._json(db.quick_menu(con))
+
         elif u.path == "/api/low-stock":
             rows = con.execute(
                 "SELECT * FROM products WHERE active = 1 AND stock IS NOT NULL"
@@ -424,6 +427,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(self.delete_preview(con, self._body()))
             elif u.path == "/api/quick-add":
                 self._json(self.quick_add(con, self._body()))
+            elif u.path == "/api/quick/group/save":
+                self._json(self.quick_group_save(con, self._body()))
+            elif u.path == "/api/quick/group/delete":
+                self._json(self.quick_group_delete(con, self._body()))
+            elif u.path == "/api/quick/item/save":
+                self._json(self.quick_item_save(con, self._body()))
+            elif u.path == "/api/quick/item/delete":
+                self._json(self.quick_item_delete(con, self._body()))
             elif u.path == "/api/shift/open":
                 self._json(self.shift_open(con, self._body()))
             elif u.path == "/api/shift/close":
@@ -749,6 +760,94 @@ class Handler(BaseHTTPRequestHandler):
         if not shift:
             raise ValueError("операционный день не открыт, войдите как кассир")
         return shift
+
+    # --- быстрые товары -------------------------------------------------
+    # Настраивать их может любой кассир, а не только хозяйка.  Испортить тут
+    # можно ровно набор кнопок: ни товара, ни остатка, ни чека это не трогает,
+    # а спрашивать код хозяйки ради новой строчки в меню значит, что меню
+    # никто никогда не поправит.
+    def quick_group_save(self, con, data):
+        """Создать категорию или переименовать существующую."""
+        self.require_shift(con)
+        name = (data.get("name") or "").strip()
+        if not name:
+            raise ValueError("укажите название категории")
+        gid = data.get("id")
+        if gid:
+            con.execute("UPDATE quick_groups SET name = ? WHERE id = ?",
+                        (name, gid))
+        else:
+            cur = con.execute(
+                "INSERT INTO quick_groups (name, pos) VALUES (?,?)",
+                (name, db.next_pos(con, "quick_groups")))
+            gid = cur.lastrowid
+        con.commit()
+        return {"ok": True, "id": gid}
+
+    def quick_group_delete(self, con, data):
+        """Убрать категорию вместе с её кнопками."""
+        self.require_shift(con)
+        gid = data.get("id")
+        if not gid:
+            raise ValueError("не указана категория")
+        con.execute("DELETE FROM quick_groups WHERE id = ?", (gid,))
+        con.commit()
+        return {"ok": True}
+
+    def quick_item_save(self, con, data):
+        """Кнопка быстрого меню: либо ссылка на товар, либо имя с ценой.
+
+        Штрихкод здесь только читают: если он есть, кнопка привязывается к
+        товару из каталога и дальше живёт его именем и ценой.  Заводить новый
+        товар отсюда нельзя намеренно, для этого есть НОВЫЙ ТОВАР, и путать
+        два разных действия в одной форме не стоит.
+        """
+        self.require_shift(con)
+        gid = data.get("group_id")
+        if not gid:
+            raise ValueError("сначала выберите категорию")
+        barcode = (data.get("barcode") or "").strip()
+        name = (data.get("name") or "").strip()
+        product_id, price = None, 0.0
+
+        if barcode:
+            row = db.find_by_code(con, barcode)
+            if row is None:
+                raise ValueError("товар с таким штрихкодом не найден: "
+                                 "заведите его кнопкой НОВЫЙ ТОВАР")
+            product_id = row["id"]
+            name = name or row["name"]
+            price = row["price"]
+        else:
+            price = number_of(data.get("price"), "Цена")
+            if price <= 0:
+                raise ValueError("укажите цену")
+        if not name:
+            raise ValueError("укажите название")
+
+        iid = data.get("id")
+        if iid:
+            con.execute("UPDATE quick_items SET group_id=?, product_id=?,"
+                        " name=?, price=? WHERE id=?",
+                        (gid, product_id, name, price, iid))
+        else:
+            cur = con.execute(
+                "INSERT INTO quick_items (group_id, product_id, name, price,"
+                " pos) VALUES (?,?,?,?,?)",
+                (gid, product_id, name, price,
+                 db.next_pos(con, "quick_items", "WHERE group_id = ?", (gid,))))
+            iid = cur.lastrowid
+        con.commit()
+        return {"ok": True, "id": iid}
+
+    def quick_item_delete(self, con, data):
+        self.require_shift(con)
+        iid = data.get("id")
+        if not iid:
+            raise ValueError("не указана позиция")
+        con.execute("DELETE FROM quick_items WHERE id = ?", (iid,))
+        con.commit()
+        return {"ok": True}
 
     def quick_add(self, con, data):
         """Быстрая приёмка: get an unknown item sellable in three fields.

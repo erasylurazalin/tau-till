@@ -21,6 +21,7 @@ them and stops them again.
 import ctypes
 from ctypes import wintypes
 import hashlib
+import io
 import json
 import os
 import re
@@ -32,6 +33,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -414,12 +416,17 @@ def retry_wait(err, default):
     return max(1, min(15, asked or default))
 
 
-def https_get(url, timeout=60, tries=3):
+def https_get(url, timeout=60, tries=3, fresh=True):
     """Скачать по HTTPS с проверкой подлинности сайта.
 
     Список корневых сертификатов везём свой.  На Windows 7, которую годами не
     обновляли, системный список отстал от жизни, и проверка может провалиться
     на совершенно исправном сервере.
+
+    fresh добавляет к адресу метку времени, чтобы обойти кэш раздачи.  Она
+    нужна для списка обновления, который лежит по одному и тому же адресу и
+    меняется, и вредна для архива выпуска: тот привязан к метке версии и
+    никогда не меняется, а метка времени мешала бы его кэшировать.
 
     GitHub считает запросы с одного интернет-адреса и, когда их набирается
     много, отвечает 429 вместо файла.  Набирается это быстрее, чем кажется:
@@ -434,9 +441,9 @@ def https_get(url, timeout=60, tries=3):
     # а обновление обычно ставят сразу после выпуска.
     sep = "&" if "?" in url else "?"
     for attempt in range(tries):
+        full = (url + sep + "t=" + str(int(time.time()))) if fresh else url
         req = urllib.request.Request(
-            url + sep + "t=" + str(int(time.time())),
-            headers={"User-Agent": "TauTill/" + local_version()})
+            full, headers={"User-Agent": "TauTill/" + local_version()})
         try:
             with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
                 return r.read()
@@ -488,8 +495,13 @@ def backup_db():
     return dest
 
 
-def download_update(man, cfg=None):
-    """Скачать новую версию в отдельную папку и проверить каждый файл.
+def target_name(f):
+    """Имя, под которым файл ложится в папку app."""
+    return f.get("as") or f["path"].rsplit("/", 1)[-1]
+
+
+def fetch_files(man, cfg, into):
+    """Скачать файлы программы по одному, прямо из репозитория.
 
     Адрес, от которого считаются пути файлов, берётся из самого списка.  Если
     его там нет, остаётся папка, откуда пришёл сам список: version.json лежит
@@ -500,17 +512,83 @@ def download_update(man, cfg=None):
         url = (cfg.get("update_url") or "").strip()
         if "/update/" in url:
             base = url.split("/update/")[0] + "/"
+    for f in man["files"]:
+        data = https_get(base + f["path"])
+        if hashlib.sha256(data).hexdigest() != f["sha256"]:
+            raise OSError("файл %s скачался повреждённым" % f["path"])
+        (into / target_name(f)).write_bytes(data)
+
+
+def fetch_archive(man, arc, into):
+    """Забрать все файлы разом, одним архивом из выпуска на GitHub.
+
+    Два запроса вместо девяти.  GitHub считает запросы с одного интернет-
+    адреса, и в день с несколькими выпусками магазин упирался в 429 и не мог
+    обновиться вовсе.  Раздача файлов из выпусков для того и сделана, а вот
+    raw для неё не предназначен.
+
+    Из архива берём ровно то, что перечислено в списке, по именам, и каждый
+    файл сверяем отдельно.  Распаковывать архив целиком нельзя: имена внутри
+    него это данные, пришедшие из сети, и такая распаковка позволила бы
+    записать файл мимо папки обновления.
+    """
+    data = https_get(arc["url"], fresh=False)
+    if hashlib.sha256(data).hexdigest() != arc.get("sha256"):
+        raise OSError("архив обновления скачался повреждённым")
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        for f in man["files"]:
+            name = target_name(f)
+            blob = z.read(name)
+            if hashlib.sha256(blob).hexdigest() != f["sha256"]:
+                raise OSError("файл %s в архиве повреждён" % name)
+            (into / name).write_bytes(blob)
+
+
+def guard_launcher(folder):
+    """Убедиться, что новый launch.py вообще разбирается как программа.
+
+    Это единственный файл, который проверка после подмены не достаёт.  Кассу
+    поднимает и проверяет ещё старый launch.py, а новый впервые запустится
+    только в следующий раз, когда касса будет включаться.  Значит сломанный
+    launch.py откат не поймает: обновление отчитается об успехе, а наутро
+    магазин останется без кассы, и починить это можно будет только приехав.
+
+    compile() читает тот же Python, что стоит на кассе, поэтому заодно ловит
+    синтаксис, которого на Windows 7 в 3.8 ещё нет.
+    """
+    f = folder / "launch.py"
+    if not f.exists():
+        return
+    try:
+        compile(f.read_text(encoding="utf-8"), "launch.py", "exec")
+    except (SyntaxError, ValueError, UnicodeDecodeError) as e:
+        raise OSError("новый launch.py не разбирается (%s), "
+                      "обновление отменено" % e)
+
+
+def download_update(man, cfg=None):
+    """Скачать новую версию в отдельную папку и проверить каждый файл."""
     new = ROOT / "app.new"
     if new.exists():
         shutil.rmtree(new)
     new.mkdir(parents=True)
-    for f in man["files"]:
-        data = https_get(base + f["path"])
-        got = hashlib.sha256(data).hexdigest()
-        if got != f["sha256"]:
-            raise OSError("файл %s скачался повреждённым" % f["path"])
-        name = f.get("as") or f["path"].rsplit("/", 1)[-1]
-        (new / name).write_bytes(data)
+
+    arc = man.get("archive") or {}
+    if arc.get("url"):
+        try:
+            fetch_archive(man, arc, new)
+        except Exception as e:
+            # Список уезжает на GitHub обычным push, а архив прикладывается к
+            # выпуску отдельной командой.  Между этими двумя моментами архива
+            # ещё нет, и попасть в эту щель проще, чем кажется.  Файлы по
+            # одному лежат там же, где всегда, так что это не повод отменять
+            # обновление.
+            log("архив не взялся (%s), качаю файлы по одному" % e)
+            fetch_files(man, cfg, new)
+    else:
+        fetch_files(man, cfg, new)
+
+    guard_launcher(new)
     log("скачано файлов: %d" % len(man["files"]))
     return new
 

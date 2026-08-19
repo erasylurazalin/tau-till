@@ -1,18 +1,18 @@
 {
-  "version": "0.5.6",
-  "released": "2026-08-17",
-  "notes": "понятное сообщение и повтор, когда GitHub отвечает 429",
+  "version": "0.5.7",
+  "released": "2026-08-19",
+  "notes": "быстрые товары на экране продажи, обновление одним архивом",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
       "path": "server.py",
-      "sha256": "79de5a7dc12808e5a9eea4327196fa7ad51cffb597c8089db97bba9820d76ee1",
-      "size": 42697
+      "sha256": "5d4841fac2211f8e54fe2e5db1c7030be58ff98ce83136e5ad9bf5cd983611b0",
+      "size": 47522
     },
     {
       "path": "db.py",
-      "sha256": "a0616dd3f151319d72d460cbc5fcad161fdaccd81691e28d15a0747ceb1ad2f8",
-      "size": 17702
+      "sha256": "b3bf99212e621618500b991a5833ebd81a149f70927c6a0b86f8d9a6e22c9f11",
+      "size": 20492
     },
     {
       "path": "printer.py",
@@ -31,19 +31,24 @@
     },
     {
       "path": "version.py",
-      "sha256": "e0720c18b6176ae993d477a7ac931deb4e85c12011e9026c7ada7f563d93a4f4",
+      "sha256": "72034dba21a009aa186066758045909eee95a2b089a3e4361aa79094b74b2e90",
       "size": 869
     },
     {
       "path": "index.html",
-      "sha256": "8452c1023b3990d0d7ed01c262affa7fc9c8c21fadbb183d513a6da728da3b60",
-      "size": 116602
+      "sha256": "b5eb197d91c9f3da031b0cc4c891d6d4cc648141dab56f6e24aeeb01c09c30ce",
+      "size": 130454
     },
     {
       "path": "pack/win/launch.py",
-      "sha256": "557804efe0e5cb4576da377c6a6516bd1afb8e8091431a6164939fbb3a1d5caa",
-      "size": 34688,
+      "sha256": "ae08727f126c403049c68df05f98774566a8ed12f18bbd28b07bf66f253bbc95",
+      "size": 39373,
       "as": "launch.py"
     }
-  ]
+  ],
+  "archive": {
+    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.7/tautill-update-0.5.7.zip",
+    "sha256": "56c5586f80dbbd3e107f54e81c1cb9a84e66559aaa113d60a40fef4450278e1f",
+    "size": 78588
+  }
 }

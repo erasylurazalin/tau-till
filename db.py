@@ -112,6 +112,28 @@ CREATE TABLE IF NOT EXISTS stock_moves (
     note       TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_moves_ts ON stock_moves(ts);
+
+-- Quick buttons on the sale screen, for what sells often and does not sit on
+-- a shelf with a sticker: printing, photocopies, a bag.  An item either
+-- points at a catalogue product or stands on its own with just a name and a
+-- price, the way the универсальный товар line does.
+CREATE TABLE IF NOT EXISTS quick_groups (
+    id   INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    pos  INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS quick_items (
+    id         INTEGER PRIMARY KEY,
+    group_id   INTEGER NOT NULL REFERENCES quick_groups(id) ON DELETE CASCADE,
+    -- SET NULL rather than CASCADE: deleting a product should not silently
+    -- take the button away, it should leave it standing on its stored name
+    -- and price for the owner to fix or remove on purpose.
+    product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+    name       TEXT NOT NULL,
+    price      REAL NOT NULL DEFAULT 0,
+    pos        INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_quick_items_group ON quick_items(group_id);
 """
 
 def connect():
@@ -307,6 +329,46 @@ def add_codes(con, product_id, codes):
 
 
 # --- operational day ------------------------------------------------------
+def quick_menu(con):
+    """Categories with their items, ready for the sale screen.
+
+    A linked item is shown with the catalogue's current name and price, not
+    with the copy stored here.  A price changed in ОСТАТКИ has to reach the
+    button, otherwise the till would quietly keep selling at last month's
+    price.  The stored copy is only the fallback for an item whose product
+    has since been deleted.
+    """
+    groups = []
+    for g in con.execute("SELECT * FROM quick_groups ORDER BY pos, id"):
+        items = []
+        for r in con.execute(
+                "SELECT q.*, p.name AS pname, p.price AS pprice,"
+                " p.unit AS punit, p.stock AS pstock, p.active AS pactive"
+                " FROM quick_items q"
+                " LEFT JOIN products p ON p.id = q.product_id"
+                " WHERE q.group_id = ? ORDER BY q.pos, q.id", (g["id"],)):
+            linked = r["product_id"] is not None
+            items.append({
+                "id": r["id"],
+                "product_id": r["product_id"],
+                "name": r["pname"] if linked else r["name"],
+                "price": r["pprice"] if linked else r["price"],
+                "unit": r["punit"] if linked else "шт",
+                "stock": r["pstock"] if linked else None,
+                "linked": linked,
+            })
+        groups.append({"id": g["id"], "name": g["name"], "items": items})
+    return groups
+
+
+def next_pos(con, table, where="", args=()):
+    """Куда дописать следующую кнопку, чтобы она встала в конец."""
+    row = con.execute(
+        "SELECT COALESCE(MAX(pos), -1) + 1 AS n FROM %s %s" % (table, where),
+        args).fetchone()
+    return row["n"]
+
+
 def current_shift(con):
     """The open day, or None.  One till, so at most one is ever open."""
     return con.execute(
