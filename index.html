@@ -58,15 +58,22 @@
   .total{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 18px}
   .total .row{display:flex;justify-content:space-between;font-size:15px;color:var(--muted)}
   .total .big{font-size:30px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+  /* Матрица 3 на 4.  Все клавиши одного размера и одного цвета: раскрашенные
+     по смыслу, они читались как подсказка, которой нет, и глаз всё равно
+     искал нужную по надписи.  Исключений два: УДАЛИТЬ красная, потому что
+     отменяет уже пробитое, и ОПЛАТА своя, она не часть матрицы.
+     Две клетки сверху слева пустые: десять кнопок в двенадцать мест, и
+     пустоту лучше оставить наверху, чем растянуть кнопки до неузнаваемости. */
   .keys{display:grid;grid-template-columns:repeat(3,minmax(96px,1fr));gap:8px}
-  .keys button{padding:14px 8px;border:1px solid var(--line);background:#fbfcfd;border-radius:6px;font:600 12px system-ui;cursor:pointer;letter-spacing:.3px}
+  .keys button{padding:14px 8px;min-height:62px;border:1px solid var(--line);
+     background:#fbfcfd;border-radius:6px;font:600 12px system-ui;cursor:pointer;
+     letter-spacing:.3px;line-height:1.25}
   .keys button:hover{background:#f0f4f7}
-  .keys .pay{grid-column:span 3;background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-size:18px;padding:20px 8px}
+  /* Первая клавиша встаёт в третий столбец, оставляя две клетки пустыми. */
+  .keys #quick{grid-column:3}
+  .keys .pay{grid-column:span 3;background:var(--accent);color:var(--accent-ink);
+     border-color:var(--accent);font-size:18px;padding:20px 8px;min-height:0}
   .keys .del1{background:var(--red);color:#fff;border-color:var(--red)}
-  .keys #extras{background:#eef2f6;line-height:1.25}
-  .keys #qty-set{background:#e3f4f8;border-color:var(--accent)}
-  .keys #universal, .keys #newitem{background:#eef2f6;line-height:1.25}
-  .keys #discount{background:#fff6e0;border-color:#d8b45a}
   td.disc{cursor:pointer}
   /* «50.00 %» must stay on one line -- the column is narrow enough that the
      default wrap would break it after the number and double the row height. */
@@ -85,8 +92,6 @@
      background:#e3f4f8;border:1px solid var(--accent);font-variant-numeric:tabular-nums}
   tr.sel td.qty b{background:#fff}
   /* ---------- быстрые товары ---------- */
-  .keys #quick{grid-column:span 3;background:#eaf7ef;border-color:#7cbb93;
-     color:#1c6b3d;font-size:14px;padding:15px 8px;letter-spacing:.6px}
   .qmwrap{display:grid;grid-template-columns:210px 1fr;gap:12px;padding:14px}
   .qmcats{display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:46vh}
   .qmitems{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
@@ -417,16 +422,20 @@
         </div>
       </div>
       <div class="keys">
+        <button id="quick">БЫСТРЫЕ<br>ТОВАРЫ</button>
+
         <button id="qty-minus">− КОЛ-ВО</button>
         <button id="qty-set">КОЛ-ВО</button>
         <button id="qty-plus">+ КОЛ-ВО</button>
-        <button id="universal">УНИВЕРСАЛЬНЫЙ<br>ПРОДУКТ</button>
-        <button id="newitem">НОВЫЙ<br>ТОВАР</button>
+
         <button id="discount">СКИДКА</button>
+        <button id="newitem">НОВЫЙ<br>ТОВАР</button>
         <button id="extras">ДОП.<br>ФУНКЦИИ</button>
+
+        <button id="universal">УНИВЕРСАЛЬНЫЙ<br>ПРОДУКТ</button>
         <button id="clear">ОЧИСТИТЬ</button>
         <button class="del1" id="remove">УДАЛИТЬ</button>
-        <button id="quick">БЫСТРЫЕ ТОВАРЫ</button>
+
         <button class="pay" id="pay">ОПЛАТА</button>
       </div>
     </div>

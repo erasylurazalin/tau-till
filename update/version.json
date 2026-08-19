@@ -1,7 +1,7 @@
 {
-  "version": "0.5.7",
+  "version": "0.5.8",
   "released": "2026-08-19",
-  "notes": "быстрые товары на экране продажи, обновление одним архивом",
+  "notes": "цвета кнопок",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "72034dba21a009aa186066758045909eee95a2b089a3e4361aa79094b74b2e90",
+      "sha256": "13fd5ded20583d00f4ecb0ddcbb12106f46a6acd299080f1514efa5ef7d4ea8e",
       "size": 869
     },
     {
       "path": "index.html",
-      "sha256": "b5eb197d91c9f3da031b0cc4c891d6d4cc648141dab56f6e24aeeb01c09c30ce",
-      "size": 130454
+      "sha256": "6e314f9a2dc0570b8c1c85ce83bdddae1e5cb56a4c490d3abeff9f157e187700",
+      "size": 131066
     },
     {
       "path": "pack/win/launch.py",
@@ -47,8 +47,8 @@
     }
   ],
   "archive": {
-    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.7/tautill-update-0.5.7.zip",
-    "sha256": "56c5586f80dbbd3e107f54e81c1cb9a84e66559aaa113d60a40fef4450278e1f",
-    "size": 78588
+    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.8/tautill-update-0.5.8.zip",
+    "sha256": "61b1d1ff1d5e1086d2a0eae81d5aa51e5a0d86a2b7ffa98df2f34294ff3e09a9",
+    "size": 78910
   }
 }
