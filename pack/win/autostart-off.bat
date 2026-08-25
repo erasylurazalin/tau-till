@@ -12,13 +12,18 @@ setlocal EnableExtensions
 title Автозапуск кассы: выключить
 cls
 
-set "DEST=%~dp0"
-if "%DEST:~-1%"=="\" set "DEST=%DEST:~0,-1%"
-
+rem Не %~dp0.  Этот же файл лежит и в архиве с флешки, рядом со своей копией
+rem shortcuts.vbs, поэтому проверка "лежит ли рядом shortcuts.vbs" проходила
+rem и там.  Запущенный из распакованной папки на Рабочем столе, он считал
+rem кассой её и переписывал ярлыки на неё: значки пропадали, а КАССА начинала
+rem открывать копию с флешки, с её собственной, давно устаревшей базой.
+set "DEST=C:\TauTill"
+if exist "%DEST%\shortcuts.vbs" goto :run
+set "DEST=%LOCALAPPDATA%\TauTill"
 if exist "%DEST%\shortcuts.vbs" goto :run
 echo.
-echo    Не нашёл shortcuts.vbs рядом с этим файлом.
-echo    Запускайте его из папки кассы, а не с флешки.
+echo    Касса на этом компьютере не найдена.
+echo    Искал в C:\TauTill и в папке пользователя.
 echo.
 timeout /t 30 /nobreak >nul
 exit /b 1

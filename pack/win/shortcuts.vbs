@@ -16,6 +16,21 @@ Set sh = CreateObject("WScript.Shell")
 dest = Tidy(sh.ExpandEnvironmentStrings("%TAU_DEST%"))
 If dest = "" Or dest = "%TAU_DEST%" Then dest = "C:\TauTill"
 
+' Последняя проверка перед тем, как переписывать ярлыки: похоже ли dest на
+' установленную кассу.  Значки лежат в корне папки кассы, потому что установщик
+' кладёт их туда из icons\, а в самом архиве с флешки в корне их нет.  Значит
+' отсутствие kassa.ico означает ровно одно: нам подсунули не ту папку, обычно
+' распакованный архив на Рабочем столе.  Переписать ярлыки на него это не
+' только потерять значки, но и заставить КАССУ открывать копию с флешки с её
+' собственной базой, где нет ни одной сегодняшней продажи.
+Dim probe
+Set probe = CreateObject("Scripting.FileSystemObject")
+If Not probe.FileExists(dest & "\kassa.ico") Then
+    WScript.Echo "Это не папка установленной кассы: " & dest
+    WScript.Echo "Ярлыки не тронуты."
+    WScript.Quit 1
+End If
+
 desktop = Folder("Desktop", Tidy(sh.ExpandEnvironmentStrings("%USERPROFILE%")) _
                  & "\Desktop")
 startup = Folder("Startup", Tidy(sh.ExpandEnvironmentStrings("%APPDATA%")) _
