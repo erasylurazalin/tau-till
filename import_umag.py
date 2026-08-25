@@ -100,6 +100,20 @@ def number(s):
         return 0.0
 
 
+def unit_of(s):
+    """Единица измерения без хвостовой точки.
+
+    UMAG пишет то "шт", то "шт." в зависимости от того, какая это выгрузка, и
+    на чеке потом соседние строки выглядят по-разному: "3 шт." и "3 шт".
+    Точка не значит ничего, так что снимаем её на входе, иначе каждый импорт
+    из другой выгрузки переписывал бы единицы туда и обратно.
+    """
+    s = (s or "").strip()
+    while s and s[-1] in ". ":
+        s = s[:-1]
+    return s or "шт"
+
+
 def quantity(s):
     """Quantity, or None when the cell is empty.
 
@@ -148,7 +162,7 @@ def read_export(path):
             "name": name,
             "cost": number(cell(row, "cost")),
             "price": number(cell(row, "price")),
-            "unit": cell(row, "unit") or "шт",
+            "unit": unit_of(cell(row, "unit")),
             "qty": quantity(cell(row, "qty")),
         })
     return goods, problems, cols
