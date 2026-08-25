@@ -1,7 +1,7 @@
 {
-  "version": "0.5.8",
-  "released": "2026-08-19",
-  "notes": "цвета кнопок",
+  "version": "0.5.9",
+  "released": "2026-08-25",
+  "notes": "клавиши на экране продажи одной матрицей, больше места для чека",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "13fd5ded20583d00f4ecb0ddcbb12106f46a6acd299080f1514efa5ef7d4ea8e",
+      "sha256": "404512f9272a363ea5b22d6bd304c91915bbd3b264753c819452a96395c2ae8f",
       "size": 869
     },
     {
       "path": "index.html",
-      "sha256": "6e314f9a2dc0570b8c1c85ce83bdddae1e5cb56a4c490d3abeff9f157e187700",
-      "size": 131066
+      "sha256": "5784e67ec917772a6f062206af620d559ff3e55aafac7e5745cc7e3ebd519402",
+      "size": 131910
     },
     {
       "path": "pack/win/launch.py",
@@ -47,8 +47,8 @@
     }
   ],
   "archive": {
-    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.8/tautill-update-0.5.8.zip",
-    "sha256": "61b1d1ff1d5e1086d2a0eae81d5aa51e5a0d86a2b7ffa98df2f34294ff3e09a9",
-    "size": 78910
+    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.9/tautill-update-0.5.9.zip",
+    "sha256": "b2156e0bac337705495516fd9d94a609387c79d8a0a3ab14c34c51d921e229fa",
+    "size": 79201
   }
 }

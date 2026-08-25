@@ -64,15 +64,22 @@
      отменяет уже пробитое, и ОПЛАТА своя, она не часть матрицы.
      Две клетки сверху слева пустые: десять кнопок в двенадцать мест, и
      пустоту лучше оставить наверху, чем растянуть кнопки до неузнаваемости. */
-  .keys{display:grid;grid-template-columns:repeat(3,minmax(96px,1fr));gap:8px}
-  .keys button{padding:14px 8px;min-height:62px;border:1px solid var(--line);
+  .keys{display:grid;grid-template-columns:repeat(4,90px);gap:8px}
+  .keys button{height:62px;padding:10px 5px;border:1px solid var(--line);
      background:#fbfcfd;border-radius:6px;font:600 12px system-ui;cursor:pointer;
-     letter-spacing:.3px;line-height:1.25}
+     letter-spacing:.3px;line-height:1.2}
   .keys button:hover{background:#f0f4f7}
-  /* Первая клавиша встаёт в третий столбец, оставляя две клетки пустыми. */
-  .keys #quick{grid-column:3}
-  .keys .pay{grid-column:span 3;background:var(--accent);color:var(--accent-ink);
-     border-color:var(--accent);font-size:18px;padding:20px 8px;min-height:0}
+  /* Пустые клетки берутся тем, что первые клавиши двух верхних рядов явно
+     поставлены во второй столбец: дальше сетка раскладывает всё сама, а
+     назад, в пропущенные клетки, она по умолчанию не возвращается. */
+  .keys #qty-minus, .keys #discount{grid-column:2}
+  /* Единственная надпись, которая не влезает в 90 px в два слова. */
+  /* Единственная надпись, которая не влезает в 90 px обычным кеглем.  Запас
+     оставлен намеренно: на кассе шрифт не тот, что здесь (Windows 7 берёт
+     Segoe UI), и подогнанное впритык там переносится на третью строку. */
+  .keys #universal{font-size:9px;letter-spacing:0;padding-left:2px;padding-right:2px}
+  .keys .pay{grid-column:span 4;height:auto;min-height:64px;background:var(--accent);
+     color:var(--accent-ink);border-color:var(--accent);font-size:18px;padding:18px 8px}
   .keys .del1{background:var(--red);color:#fff;border-color:var(--red)}
   td.disc{cursor:pointer}
   /* «50.00 %» must stay on one line -- the column is narrow enough that the
@@ -422,8 +429,6 @@
         </div>
       </div>
       <div class="keys">
-        <button id="quick">БЫСТРЫЕ<br>ТОВАРЫ</button>
-
         <button id="qty-minus">− КОЛ-ВО</button>
         <button id="qty-set">КОЛ-ВО</button>
         <button id="qty-plus">+ КОЛ-ВО</button>
@@ -432,6 +437,7 @@
         <button id="newitem">НОВЫЙ<br>ТОВАР</button>
         <button id="extras">ДОП.<br>ФУНКЦИИ</button>
 
+        <button id="quick">БЫСТРЫЕ<br>ТОВАРЫ</button>
         <button id="universal">УНИВЕРСАЛЬНЫЙ<br>ПРОДУКТ</button>
         <button id="clear">ОЧИСТИТЬ</button>
         <button class="del1" id="remove">УДАЛИТЬ</button>
