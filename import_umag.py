@@ -157,7 +157,8 @@ def read_export(path):
 def apply(con, goods, deactivate=False, stock_note=None, zeros=False):
     stats = {"added": 0, "updated": 0, "unchanged": 0, "deactivated": 0,
              "codes": 0, "code_clashes": [], "counted": 0, "skipped_zero": 0,
-             "already": 0, "recounted": []}
+             "already": 0, "recounted": [], "skipped_minus": 0,
+             "minus_worst": []}
     for g in goods:
         row = con.execute("SELECT * FROM products WHERE barcode = ?",
                           (g["barcode"],)).fetchone()
@@ -194,7 +195,19 @@ def apply(con, goods, deactivate=False, stock_note=None, zeros=False):
                 stats["code_clashes"].append(f"{g['name']}: {e}")
 
         if stock_note is not None and g["qty"] is not None:
-            if g["qty"] == 0 and not zeros:
+            if g["qty"] < 0:
+                # Минус это не результат подсчёта.  В UMAG так выглядит всё,
+                # что продавали, не приходуя: распечатка, ксерокс,
+                # сканирование.  Склад считал их в минус годами, и «остаток
+                # -21814» не значит ничего, кроме «учёта тут никогда не было».
+                # Перенести такое значит получить красное предупреждение
+                # «товар в минусе» почти на каждый скан и приучить кассира
+                # не читать предупреждения вовсе.  Оставляем «не посчитан»:
+                # это ровно правда, и товар честно попадёт в список на
+                # инвентаризацию.
+                stats["skipped_minus"] += 1
+                stats["minus_worst"].append((g["name"], g["qty"]))
+            elif g["qty"] == 0 and not zeros:
                 # Leaving these "не посчитан" keeps the ТОЛЬКО НЕ ПОСЧИТАННЫЕ
                 # filter useful.  A file where every untracked good says 0
                 # would otherwise mark the whole catalogue as counted-empty.
@@ -286,6 +299,11 @@ def main(argv):
 
     if stock_note:
         print(f"  остатки перенесены: {stats['counted']}")
+        if stats["skipped_minus"]:
+            print(f"  отрицательные остатки пропущены: {stats['skipped_minus']}"
+                  "  (остались «не посчитан»)")
+            for name, qty in sorted(stats["minus_worst"], key=lambda x: x[1])[:5]:
+                print(f"    {name}: в файле {qty:g}")
         if stats["already"]:
             print(f"  уже столько же, не трогали: {stats['already']}")
         if stats["skipped_zero"]:
