@@ -99,47 +99,31 @@
      background:#e3f4f8;border:1px solid var(--accent);font-variant-numeric:tabular-nums}
   tr.sel td.qty b{background:#fff}
   /* ---------- быстрые товары ---------- */
-  .qmwrap{display:grid;grid-template-columns:210px 1fr;gap:12px;padding:14px}
-  .qmcats{display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:46vh}
-  .qmitems{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
-     gap:10px;align-content:start;overflow-y:auto;max-height:46vh}
-  .qmrow{display:flex;gap:6px;align-items:center}
-  /* В сетке товаров кнопки настройки уходят под карточку, а не встают рядом:
-     рядом они съедали половину ширины, и название ломалось на три строки. */
-  .qmitems .qmrow, .qmcats .qmrow{flex-direction:column;align-items:stretch;gap:6px}
-  .qmtools{display:flex;gap:6px}
-  .qmtools button{flex:1}
-  .qmrow .grow{flex:1;min-width:0}
-  .qmcats .grow{padding:15px 12px;border:1px solid var(--line);background:#fbfcfd;
-     border-radius:6px;font:600 13px system-ui;cursor:pointer;text-align:left}
-  .qmcats .grow.on{background:#e3f4f8;border-color:var(--accent)}
-  .qmitems .grow{padding:14px 12px;border:1px solid var(--line);background:#fff;
-     border-radius:6px;cursor:pointer;text-align:left;font:600 14px system-ui;
-     line-height:1.3}
-  .qmitems .grow .p{display:block;margin-top:7px;font:700 17px system-ui;
-     color:var(--accent);font-variant-numeric:tabular-nums}
-  .qmitems .grow .b{display:block;margin-top:4px;font:400 11px system-ui;color:var(--muted)}
-  button.tiny{padding:8px 11px;border:1px solid var(--line);background:#fff;
-     border-radius:5px;font:600 12px system-ui;cursor:pointer;white-space:nowrap}
-  button.tiny.del{color:var(--red);border-color:#e8bcc4}
-  button.tiny.armed{background:var(--red);border-color:var(--red);color:#fff}
-  /* Тихая кнопка: заметная ровно настолько, чтобы её нашли, когда ищут, и
-     не тянула на себя внимание, когда просто пробивают товар.  Правило
-     адресное, иначе общий .payfoot button перекрасит её в белое по белому. */
-  .payfoot button.quiet{background:#fff;border:1px solid #c3ccd6;color:#5b6b7b;
-     font:600 12px system-ui;padding:13px 18px;border-radius:6px;cursor:pointer;
-     letter-spacing:.4px}
-  .qmempty{color:var(--muted);font-size:14px;padding:26px;text-align:center;line-height:1.7}
-  .qmform{border-top:1px solid var(--line);background:#fbfcfd;padding:14px}
-  .qmftitle{font:600 12px system-ui;color:var(--muted);letter-spacing:.5px;margin-bottom:10px}
-  .qmfields{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
-  .qmfields label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
-  .qmfields input{padding:11px;border:1px solid var(--line);border-radius:5px;font-size:16px}
-  .qmfields label[hidden]{display:none}
-  .qmfmsg{color:var(--red);font-size:13px;min-height:18px;padding:6px 2px 0}
-  .qmfbtns{display:flex;gap:8px;margin-top:6px}
-  .qmfbtns button{padding:12px 20px;border:1px solid var(--line);background:#fff;
-     border-radius:6px;font:600 13px system-ui;cursor:pointer}
+  /* Три отдельных окна вместо одного: категории, товары выбранной категории и
+     форма.  Раньше всё жило в одном окне с режимом настройки, и настройка
+     оказалась ровно тем, чего на кассе быть не должно: невидимым состоянием,
+     от которого одно и то же нажатие то продаёт, то правит. */
+  .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));
+     gap:12px;padding:16px;align-content:start;max-height:56vh;overflow-y:auto}
+  /* Три к двум, как просили: одинаковые плитки, по которым удобно попадать
+     пальцем, и ни одна не выделяется размером. */
+  .qtile{aspect-ratio:3/2;display:flex;flex-direction:column;
+     align-items:center;justify-content:center;gap:8px;text-align:center;
+     padding:10px;border:1px solid var(--line);background:#fff;border-radius:8px;
+     cursor:pointer;font:600 15px/1.25 system-ui;color:var(--ink)}
+  .qtile:hover{background:#f5f8fb}
+  .qtile .p{font:700 19px system-ui;color:var(--accent);
+     font-variant-numeric:tabular-nums}
+  .qtile .n{font:400 12px system-ui;color:var(--muted)}
+  .qtile.add{background:#eaf7ef;border:2px dashed #7cbb93;color:#1c6b3d;
+     font:700 16px system-ui;letter-spacing:.5px}
+  .qfields{display:grid;grid-template-columns:1fr;gap:12px;padding:16px}
+  .qfields label{display:flex;flex-direction:column;gap:5px;font-size:13px;
+     color:var(--muted)}
+  .qfields input{padding:13px;border:1px solid var(--line);border-radius:6px;
+     font-size:17px}
+  .qfields label[hidden]{display:none}
+  .qfmsg{color:var(--red);font-size:14px;min-height:20px;padding:0 16px 10px}
   .strike{color:var(--muted);text-decoration:line-through;font-size:12px}
   .hint{color:var(--muted);font-size:13px;padding:24px;text-align:center}
   form.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;padding:14px}
@@ -818,36 +802,49 @@
 </div>
 
 <!-- ================= EXTRAS MENU ================= -->
-<div class="modal" id="quickmenu" hidden>
-  <div class="paybox" style="width:880px;max-width:94vw">
+<div class="modal" id="qmcats" hidden>
+  <div class="paybox" style="width:820px;max-width:94vw">
     <div class="payhead">
-      <div class="prow"><span class="k">БЫСТРЫЕ ТОВАРЫ</span>
-        <span class="v" id="qm-mode"></span></div>
+      <div class="prow"><span class="k">БЫСТРЫЕ ТОВАРЫ</span><span class="v"></span></div>
+    </div>
+    <div class="paybody"><div class="qgrid" id="qc-list"></div></div>
+    <div class="payfoot" style="grid-template-columns:1fr">
+      <button class="cancel" id="qc-close">ЗАКРЫТЬ</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="qmitems" hidden>
+  <div class="paybox" style="width:820px;max-width:94vw">
+    <div class="payhead">
+      <div class="prow"><span class="k" id="qi-title"></span><span class="v"></span></div>
+    </div>
+    <div class="paybody"><div class="qgrid" id="qi-list"></div></div>
+    <div class="payfoot" style="grid-template-columns:1fr 1fr">
+      <button class="exact" id="qi-back">НАЗАД</button>
+      <button class="cancel" id="qi-close">ЗАКРЫТЬ</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="qmform" hidden>
+  <div class="paybox" style="width:560px;max-width:94vw">
+    <div class="payhead">
+      <div class="prow"><span class="k" id="qf-title"></span><span class="v"></span></div>
     </div>
     <div class="paybody">
-      <div class="qmwrap">
-        <div class="qmcats" id="qm-cats"></div>
-        <div class="qmitems" id="qm-items"></div>
+      <div class="qfields">
+        <label>Название<input id="qf-name" autocomplete="off" data-kbd></label>
+        <label id="qf-lprice">Цена, тг<input id="qf-price" inputmode="decimal"
+               autocomplete="off" data-num></label>
+        <label id="qf-lcode">Штрихкод, если товар с полки
+          <input id="qf-code" autocomplete="off" placeholder="отсканируйте сюда"></label>
       </div>
-      <div class="qmform" id="qm-form" hidden>
-        <div class="qmftitle" id="qm-ftitle"></div>
-        <div class="qmfields">
-          <label id="qm-lname">Название<input id="qm-name" autocomplete="off" data-kbd></label>
-          <label id="qm-lprice">Цена, тг<input id="qm-price" inputmode="decimal"
-                 autocomplete="off" data-num></label>
-          <label id="qm-lcode">Штрихкод, если товар с полки
-            <input id="qm-code" autocomplete="off" placeholder="отсканируйте сюда"></label>
-        </div>
-        <div class="qmfmsg" id="qm-fmsg"></div>
-        <div class="qmfbtns">
-          <button class="primary" id="qm-save">СОХРАНИТЬ</button>
-          <button id="qm-cancel">ОТМЕНА</button>
-        </div>
-      </div>
+      <div class="qfmsg" id="qf-msg"></div>
     </div>
-    <div class="payfoot" style="grid-template-columns:auto 1fr">
-      <button class="quiet" id="qm-setup">НАСТРОИТЬ</button>
-      <button class="cancel" id="qm-close">ЗАКРЫТЬ</button>
+    <div class="payfoot" style="grid-template-columns:1fr 1fr">
+      <button class="confirm" id="qf-save">СОХРАНИТЬ</button>
+      <button class="cancel" id="qf-cancel">ОТМЕНА</button>
     </div>
   </div>
 </div>
@@ -1738,7 +1735,9 @@ document.addEventListener('keydown', e => {
   const modals = {pay: [closePay, '#p-confirm'], num: [closeNum, '#n-ok'],
                   // Enter здесь приходит только со сканера, и приходит он в
                   // поле штрихкода: пусть он и сохраняет позицию.
-                  qmenu: [quickMenuEsc, '#qm-save'],
+                  qform: [() => $('#qf-cancel').click(), '#qf-save'],
+                  qitems: [() => $('#qi-back').click(), null],
+                  qcats: [qmClose, null],
                   quick: [closeQuick, '#k-save'],
                   disc: [() => $('#discmodal').hidden = true, '#dc-ok'],
                   extras: [() => $('#extrasmodal').hidden = true, '#x-close'],
@@ -1747,7 +1746,9 @@ document.addEventListener('keydown', e => {
                   void: [closeVoid, '#v-cancel'],
                   quit: [closeQuit, '#q-cancel'],
                   upd: [closeUpd, '#u-cancel']};
-  const open = !$('#quickmenu').hidden ? 'qmenu'
+  const open = !$('#qmform').hidden ? 'qform'
+             : !$('#qmitems').hidden ? 'qitems'
+             : !$('#qmcats').hidden ? 'qcats'
              : !$('#updmodal').hidden ? 'upd'
              : !$('#quitmodal').hidden ? 'quit'
              : !$('#paymodal').hidden ? 'pay'
@@ -1758,223 +1759,161 @@ document.addEventListener('keydown', e => {
              : !$('#discmodal').hidden ? 'disc' : null;
   if (!open) return;
   const [close, confirmSel] = modals[open];
-  const confirmBtn = $(confirmSel);
-  if (e.key === 'Escape') { e.preventDefault(); close(); }
-  if (e.key === 'Enter' && !confirmBtn.disabled) {
+  if (e.key === 'Escape') { e.preventDefault(); return close(); }
+  // Не у каждого окна есть что подтверждать: в списке категорий Enter со
+  // сканера не должен нажимать ничего.
+  const confirmBtn = confirmSel ? $(confirmSel) : null;
+  if (e.key === 'Enter' && confirmBtn && !confirmBtn.disabled) {
     e.preventDefault(); confirmBtn.click();
   }
 });
 
 // ---------- быстрые товары ----------
-// Кнопки для того, что продаётся часто, а на полке со штрихкодом не лежит:
-// распечатка, ксерокопия, пакет.  Позиция либо ссылается на товар каталога,
-// либо стоит сама по себе с названием и ценой, как универсальный товар, но
-// с понятным именем в чеке.
-//
-// Настройка спрятана за отдельной кнопкой НАСТРОИТЬ и всегда выключена при
-// открытии: за смену её открывают сто раз, чтобы пробить товар, и ни разу,
-// чтобы поменять меню.  Прятать её глубже смысла нет, менять состав кнопок
-// родители должны сами, не дожидаясь меня.
-let quick = [], quickCat = null, quickEdit = false, quickForm = null, quickArmed = null;
+// Три окна: категории, товары выбранной категории, форма.  Разделены не ради
+// красоты: пока всё жило в одном окне с переключателем НАСТРОИТЬ, одно и то же
+// нажатие по плитке то продавало товар, то открывало его правку, а понять, в
+// каком ты режиме, можно было только по надписи на кнопке внизу.  На кассе,
+// где ошибка это лишняя строка в чеке покупателя, такого состояния быть не
+// должно.  Теперь добавление это отдельная плитка, которая видна всегда, и
+// нажатие по товару всегда значит одно и то же: продать.
+// Префикс qm у всех имён здесь не для красоты: closeQuick уже занято
+// окном НОВЫЙ ТОВАР ниже по файлу, и объявление с тем же именем молча
+// перекрывало это, а не ломалось.  Окна переставали закрываться, и
+// понять почему по поведению было нельзя.
+let quick = [], quickCat = null, quickForm = null, quickBack = null;
 
 const esc = s => String(s === null || s === undefined ? '' : s)
   .replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 
-$('#quick').onclick = () => openQuickMenu();
+const QUICK_WINDOWS = ['#qmcats', '#qmitems', '#qmform'];
+const qmHide = () => QUICK_WINDOWS.forEach(sel => $(sel).hidden = true);
 
-async function openQuickMenu() {
-  quickEdit = false;
-  closeQuickForm();
-  $('#quickmenu').hidden = false;
-  await loadQuick();
-}
+$('#quick').onclick = () => qmOpenCats();
 
-function closeQuickMenu() {
-  $('#quickmenu').hidden = true;
-  closeQuickForm();
-  closeKbd();
-  $('#scan').focus();
-}
-
-// Escape сначала закрывает форму, если она открыта, и только потом само меню:
-// иначе одно неверное нажатие выбрасывало бы из наполовину заполненной формы.
-function quickMenuEsc() {
-  if (!$('#qm-form').hidden) closeQuickForm(); else closeQuickMenu();
-}
-
-async function loadQuick() {
+async function qmLoad() {
   try {
     quick = await (await fetch('/api/quick')).json();
     if (!Array.isArray(quick)) quick = [];
   } catch (e) {
     quick = [];
   }
-  if (!quick.some(g => g.id === quickCat))
-    quickCat = quick.length ? quick[0].id : null;
-  renderQuick();
 }
 
-function renderQuick() {
-  quickArmed = null;
-  $('#qm-mode').textContent = quickEdit ? 'НАСТРОЙКА' : '';
-  $('#qm-setup').textContent = quickEdit ? 'ГОТОВО' : 'НАСТРОИТЬ';
+async function qmOpenCats() {
+  await qmLoad();
+  qmHide();
+  $('#qmcats').hidden = false;
+  qmRenderCats();
+}
 
-  $('#qm-cats').innerHTML = quick.map(g => `
-    <div class="qmrow">
-      <button class="grow ${g.id === quickCat ? 'on' : ''}" data-cat="${g.id}"
-        >${esc(g.name)}</button>
-      ${quickEdit ? `<div class="qmtools">
-        <button class="tiny" data-catedit="${g.id}">ИМЯ</button>
-        <button class="tiny del" data-label="УБРАТЬ" data-catdel="${g.id}"
-          >УБРАТЬ</button></div>` : ''}
-    </div>`).join('')
-    + (quickEdit ? '<button class="tiny" id="qm-addcat">+ КАТЕГОРИЯ</button>' : '');
+function qmOpenItems(id) {
+  quickCat = id;
+  qmHide();
+  $('#qmitems').hidden = false;
+  qmRenderItems();
+}
 
+function qmClose() {
+  qmHide();
+  closeKbd();
+  $('#scan').focus();
+}
+
+function qmRenderCats() {
+  $('#qc-list').innerHTML = quick.map(g => `
+    <button class="qtile" data-cat="${g.id}">${esc(g.name)}
+      <span class="n">${g.items.length} шт.</span></button>`).join('')
+    + '<button class="qtile add" id="qc-add">+ КАТЕГОРИЯ</button>';
+  $('#qc-list').querySelectorAll('[data-cat]').forEach(b =>
+    b.onclick = () => qmOpenItems(+b.dataset.cat));
+  $('#qc-add').onclick = () => qmOpenForm('cat');
+}
+
+function qmRenderItems() {
   const cat = quick.find(g => g.id === quickCat);
-  const items = cat ? cat.items : [];
-  if (!quick.length) {
-    $('#qm-items').innerHTML = `<div class="qmempty">Пока пусто.<br>
-      Нажмите <b>НАСТРОИТЬ</b>, чтобы завести категорию и первые кнопки.</div>`;
-  } else {
-    $('#qm-items').innerHTML = items.map(it => `
-      <div class="qmrow">
-        <button class="grow" data-item="${it.id}">${esc(it.name)}
-          <span class="p">${money(it.price)} тг</span>
-          ${it.linked ? `<span class="b">со склада · ост. ${stockText(it.stock)}</span>` : ''}
-        </button>
-        ${quickEdit ? `<div class="qmtools">
-          <button class="tiny" data-itemedit="${it.id}">ИЗМЕНИТЬ</button>
-          <button class="tiny del" data-label="УБРАТЬ" data-itemdel="${it.id}"
-            >УБРАТЬ</button></div>` : ''}
-      </div>`).join('')
-      + (quickEdit && cat ? '<button class="tiny" id="qm-additem">+ ПОЗИЦИЯ</button>' : '');
-    if (!items.length && !quickEdit)
-      $('#qm-items').innerHTML =
-        '<div class="qmempty">В этой категории пока нет позиций.</div>';
-  }
-  wireQuick();
-}
-
-function wireQuick() {
-  const on = (sel, attr, fn) => $('#quickmenu').querySelectorAll(sel)
-    .forEach(b => b.onclick = () => fn(+b.dataset[attr], b));
-
-  on('[data-cat]', 'cat', id => { quickCat = id; closeQuickForm(); renderQuick(); });
-  on('[data-item]', 'item', id => {
+  $('#qi-title').textContent = cat ? cat.name : '';
+  $('#qi-list').innerHTML = (cat ? cat.items : []).map(it => `
+    <button class="qtile" data-item="${it.id}">${esc(it.name)}
+      <span class="p">${money(it.price)} тг</span></button>`).join('')
+    + '<button class="qtile add" id="qi-add">+ ПРОДУКТ</button>';
+  $('#qi-list').querySelectorAll('[data-item]').forEach(b => b.onclick = () => {
     const it = (quick.find(g => g.id === quickCat) || {items: []})
-      .items.find(x => x.id === id);
-    if (!it) return;
-    if (quickEdit) openQuickForm('item', it); else addQuick(it);
+      .items.find(x => x.id === +b.dataset.item);
+    if (it) qmAdd(it);
   });
-  on('[data-catedit]', 'catedit', id =>
-    openQuickForm('cat', quick.find(g => g.id === id)));
-  on('[data-catdel]', 'catdel', (id, b) =>
-    armQuick(b, () => sendQuick('/api/quick/group/delete', {id: id})));
-  on('[data-itemedit]', 'itemedit', id => {
-    const it = (quick.find(g => g.id === quickCat) || {items: []})
-      .items.find(x => x.id === id);
-    if (it) openQuickForm('item', it);
-  });
-  on('[data-itemdel]', 'itemdel', (id, b) =>
-    armQuick(b, () => sendQuick('/api/quick/item/delete', {id: id})));
-
-  const addcat = $('#qm-addcat'), additem = $('#qm-additem');
-  if (addcat) addcat.onclick = () => openQuickForm('cat', null);
-  if (additem) additem.onclick = () => openQuickForm('item', null);
+  $('#qi-add').onclick = () => qmOpenForm('item');
 }
 
-// Удаление в два нажатия, как ОЧИСТИТЬ: браузерных диалогов в кассе нет, а
-// промахнуться по крестику рядом с кнопкой товара слишком легко.
-function armQuick(btn, run) {
-  if (quickArmed === btn) { quickArmed = null; return run(); }
-  if (quickArmed) {
-    quickArmed.classList.remove('armed');
-    quickArmed.textContent = quickArmed.dataset.label || 'УБРАТЬ';
-  }
-  quickArmed = btn;
-  btn.classList.add('armed');
-  btn.textContent = 'ТОЧНО?';
-}
-
-function addQuick(it) {
+function qmAdd(it) {
   if (it.linked && it.product_id) {
     addItem({id: it.product_id, name: it.name, price: it.price,
              unit: it.unit, stock: it.stock});
   } else {
     // Своя строка чека, как у универсального товара, но с настоящим именем:
-    // на чеке покупатель увидит «Ч/Б распечатка», а не «Универсальный товар».
+    // покупатель увидит «Ч/Б распечатка», а не «Универсальный товар».
     cart.push({product_id: null, name: it.name, price: it.price,
                unit: it.unit || 'шт', qty: 1, disc: 0, stock: null});
     sel = cart.length - 1;
     render();
   }
-  closeQuickMenu();
+  qmClose();
   toast(`«${it.name}» в чеке`);
 }
 
-function openQuickForm(kind, data) {
-  quickForm = {kind: kind, id: data ? data.id : null};
+// Форма открывается поверх, а окно под ней прячется: два полупрозрачных окна
+// друг на друге выглядят как грязь на экране, а вернуться всё равно есть куда.
+function qmOpenForm(kind) {
+  quickForm = kind;
+  quickBack = kind === 'cat' ? 'cats' : 'items';
   const isCat = kind === 'cat';
-  $('#qm-ftitle').textContent = isCat
-    ? (quickForm.id ? 'ПЕРЕИМЕНОВАТЬ КАТЕГОРИЮ' : 'НОВАЯ КАТЕГОРИЯ')
-    : (quickForm.id ? 'ИЗМЕНИТЬ ПОЗИЦИЮ' : 'НОВАЯ ПОЗИЦИЯ');
-  $('#qm-lprice').hidden = isCat;
-  $('#qm-lcode').hidden = isCat;
-  $('#qm-name').value = data ? (data.name || '') : '';
-  $('#qm-price').value = (!isCat && data && data.price) ? String(data.price) : '';
-  $('#qm-code').value = '';
-  $('#qm-fmsg').textContent = '';
-  $('#qm-form').hidden = false;
-  $('#qm-save').disabled = false;
-  renderQuick();
-  // Курсор сразу в название, иначе экранная клавиатура не поднимется.  На
-  // кассе физической клавиатуры нет, и форма, в которую сначала надо попасть
-  // пальцем по самому полю, просто не заполняется: понять это неоткуда.
-  // Сканер при этом никуда не денется: у него своё поле, подписанное
-  // «если товар с полки», и до него доходят, когда он нужен.
-  $('#qm-name').focus();
+  $('#qf-title').textContent = isCat ? 'НОВАЯ КАТЕГОРИЯ' : 'НОВЫЙ ПРОДУКТ';
+  $('#qf-lprice').hidden = isCat;
+  $('#qf-lcode').hidden = isCat;
+  $('#qf-name').value = '';
+  $('#qf-price').value = '';
+  $('#qf-code').value = '';
+  $('#qf-msg').textContent = '';
+  qmHide();
+  $('#qmform').hidden = false;
+  // Клавиатуры у кассы нет, поэтому курсор ставим сами: иначе поле не
+  // заполнить, а догадаться, что надо сначала нажать по самому полю, неоткуда.
+  $('#qf-name').focus();
 }
 
-function closeQuickForm() {
+function qmCloseForm() {
   quickForm = null;
-  $('#qm-form').hidden = true;
-  // Пока формы нет, Enter от сканера не должен ничего сохранять.
-  $('#qm-save').disabled = true;
   closeKbd();
+  qmHide();
+  if (quickBack === 'items') { $('#qmitems').hidden = false; qmRenderItems(); }
+  else { $('#qmcats').hidden = false; qmRenderCats(); }
 }
 
-async function sendQuick(url, body) {
+$('#qc-close').onclick = () => qmClose();
+$('#qi-close').onclick = () => qmClose();
+$('#qi-back').onclick = () => { qmHide(); $('#qmcats').hidden = false; qmRenderCats(); };
+$('#qf-cancel').onclick = () => qmCloseForm();
+
+$('#qf-save').onclick = async () => {
+  if (!quickForm) return;
+  const name = $('#qf-name').value.trim();
+  const body = quickForm === 'cat'
+    ? {name: name}
+    : {group_id: quickCat, name: name,
+       price: $('#qf-price').value.trim(), barcode: $('#qf-code').value.trim()};
+  const url = quickForm === 'cat' ? '/api/quick/group/save' : '/api/quick/item/save';
   const res = await postJSON(url, body);
   if (res.error) {
-    $('#qm-fmsg').textContent = res.error;
-    toast(res.error, true);
-    return null;
-  }
-  await loadQuick();
-  return res;
-}
-
-$('#qm-setup').onclick = () => {
-  quickEdit = !quickEdit;
-  closeQuickForm();
-  renderQuick();
-};
-$('#qm-close').onclick = () => closeQuickMenu();
-$('#qm-cancel').onclick = () => { closeQuickForm(); renderQuick(); };
-
-$('#qm-save').onclick = async () => {
-  if (!quickForm) return;
-  const name = $('#qm-name').value.trim();
-  if (quickForm.kind === 'cat') {
-    const res = await sendQuick('/api/quick/group/save',
-                                {id: quickForm.id, name: name});
-    if (res) { quickCat = res.id; closeQuickForm(); renderQuick(); }
+    $('#qf-msg').textContent = res.error;
     return;
   }
-  const res = await sendQuick('/api/quick/item/save', {
-    id: quickForm.id, group_id: quickCat, name: name,
-    price: $('#qm-price').value.trim(), barcode: $('#qm-code').value.trim()});
-  if (res) { closeQuickForm(); renderQuick(); }
+  // Новая категория сразу открывается: её завели, чтобы что-то в неё положить.
+  const wasCat = quickForm === 'cat';
+  await qmLoad();
+  quickForm = null;
+  closeKbd();
+  qmHide();
+  if (wasCat) { qmOpenItems(res.id); }
+  else { $('#qmitems').hidden = false; qmRenderItems(); }
 };
 
 // ---------- new product (quick receive, from the sale screen) ----------

@@ -1,7 +1,7 @@
 {
-  "version": "0.5.11",
+  "version": "0.5.12",
   "released": "2026-08-28",
-  "notes": "клавиатура сама поднимается в настройке быстрых товаров",
+  "notes": "быстрые товары: отдельные окна категорий, товаров и формы",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "f99367b56e3b718e84575804ac25db712f21c7ace42f3a69201aecd70a9dfaf9",
+      "sha256": "5f4911c5e09163ae237ac168f8e2f219dcf3cb2ef84ad7c6269aba30cea69a0b",
       "size": 871
     },
     {
       "path": "index.html",
-      "sha256": "d4ea9a98be95ca4218f16860d0fbbb3377d83d16d916f4c8653c0e8495d8dd52",
-      "size": 132560
+      "sha256": "51fc3617d90e1763b786bbafd6ecb7a9a3e142cf16aee1ed996b2d3e6b0e192d",
+      "size": 129310
     },
     {
       "path": "pack/win/launch.py",
@@ -47,8 +47,8 @@
     }
   ],
   "archive": {
-    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.11/tautill-update-0.5.11.zip",
-    "sha256": "aa49eba70aca6715a1489b2700e330a8851192b2975f3dbf8342c83b66e7fdcb",
-    "size": 80372
+    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.12/tautill-update-0.5.12.zip",
+    "sha256": "bcbdc24a1ab54450c68df34b2fbd6cb1ebd683e09ae41e36943a019b0fbe70d3",
+    "size": 79542
   }
 }
