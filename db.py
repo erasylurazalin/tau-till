@@ -242,6 +242,7 @@ def init():
         con.execute("INSERT INTO cashiers (name, pin, is_owner) VALUES (?,?,1)",
                     OWNER)
     seed_quick(con)
+    split_joined_codes(con)
     con.commit()
     return con
 
@@ -304,17 +305,39 @@ def now_iso():
 
 # --- barcodes -------------------------------------------------------------
 def find_by_code(con, code):
-    """A product by any of its stickers -- the main one or an extra."""
+    """A product by any of its stickers -- the main one or an extra.
+
+    Ведущие нули сравниваются нестрого, и это не вольность.  Выгрузка UMAG
+    приходит таблицей Excel, а Excel держит штрихкод числом: 098006319813
+    доезжает до базы как 98006319813.  Наклейка на товаре при этом осталась
+    прежней, сканер честно присылает все тринадцать знаков, точное сравнение
+    не находит ничего, и касса предлагает завести товар, который у неё уже
+    есть.  Так потерялись все коды, начинавшиеся с нуля.
+
+    Сначала всё-таки точное совпадение: оно ходит по индексу и покрывает
+    подавляющее большинство сканирований.  Нестрогое ищется только когда
+    точного не нашлось.
+    """
     code = (code or "").strip()
     if not code:
         return None
-    row = con.execute("SELECT * FROM products WHERE barcode = ?",
-                      (code,)).fetchone()
-    if row is None:
-        row = con.execute(
-            "SELECT p.* FROM products p JOIN barcodes b ON b.product_id = p.id"
-            " WHERE b.code = ?", (code,)).fetchone()
-    return row
+    exact = ("SELECT * FROM products WHERE barcode = ?",
+             "SELECT p.* FROM products p JOIN barcodes b ON b.product_id = p.id"
+             " WHERE b.code = ?")
+    for sql in exact:
+        row = con.execute(sql, (code,)).fetchone()
+        if row is not None:
+            return row
+
+    bare = code.lstrip("0") or "0"
+    loose = ("SELECT * FROM products WHERE ltrim(barcode, '0') = ?",
+             "SELECT p.* FROM products p JOIN barcodes b ON b.product_id = p.id"
+             " WHERE ltrim(b.code, '0') = ?")
+    for sql in loose:
+        row = con.execute(sql, (bare,)).fetchone()
+        if row is not None:
+            return row
+    return None
 
 
 def codes_of(con, product_id):
@@ -639,6 +662,29 @@ def seed_quick(con):
 
     con.execute("PRAGMA user_version = %d" % SEED_VERSION)
     return added
+
+
+def split_joined_codes(con):
+    """Разделить доп. штрихкоды, слипшиеся в одну строку.
+
+    В первой выгрузке UMAG колонка доп. кода была одна на товар, и когда
+    наклеек несколько, они приезжали одной строкой через точку с запятой:
+    «6941496207648;6941496207570;...».  Сканер такую строку прислать не может
+    никогда, так что товар с ней просто не находится ни по одной из наклеек.
+    """
+    fixed = 0
+    for r in list(con.execute("SELECT id, product_id, code FROM barcodes")):
+        parts = [x for x in re.split(r"[,;/|\s]+", r["code"] or "") if x]
+        if len(parts) < 2:
+            continue
+        con.execute("DELETE FROM barcodes WHERE id = ?", (r["id"],))
+        for part in parts:
+            # OR IGNORE: часть кодов из склейки может уже принадлежать
+            # другому товару, и отбирать их у него мы не собираемся.
+            con.execute("INSERT OR IGNORE INTO barcodes (product_id, code)"
+                        " VALUES (?,?)", (r["product_id"], part))
+        fixed += 1
+    return fixed
 
 
 def park_label(con):

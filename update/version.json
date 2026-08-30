@@ -1,7 +1,7 @@
 {
-  "version": "0.5.15",
+  "version": "0.5.16",
   "released": "2026-08-30",
-  "notes": "отложенные чеки: чек убирается в сторону и достаётся обратно",
+  "notes": "сканируются штрихкоды с ведущим нулём и слипшиеся доп. коды",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
@@ -11,8 +11,8 @@
     },
     {
       "path": "db.py",
-      "sha256": "0a5ee09733edc232503b9e6c6916a744d906ae7aea8f3aa794700818fc42d2f2",
-      "size": 38582
+      "sha256": "99bc26250e263cf847e0f820b8b3dca985ae2ad93fa05966827e2f443773f97f",
+      "size": 41367
     },
     {
       "path": "printer.py",
@@ -31,7 +31,7 @@
     },
     {
       "path": "version.py",
-      "sha256": "22ef7cd0dcb08c7a8ac6d65aa84f7d763970965d5f1b674c55c6bbe6a024b7d1",
+      "sha256": "17df346af5dc433519a76cd8355db623a595157f60661c2873e1a1be1f7d776c",
       "size": 871
     },
     {
@@ -47,8 +47,8 @@
     }
   ],
   "archive": {
-    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.15/tautill-update-0.5.15.zip",
-    "sha256": "9591e88b87bb2aa77f7e59b80c6e4fda363233d5484b2b8b85cecc13aa5064ff",
-    "size": 88592
+    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.16/tautill-update-0.5.16.zip",
+    "sha256": "68db2d51a45cb42f63b372c776bbf1e35f1d015e62f0a058fd95834c204afedb",
+    "size": 89513
   }
 }
