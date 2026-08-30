@@ -1,7 +1,7 @@
 {
-  "version": "0.5.12",
-  "released": "2026-08-28",
-  "notes": "быстрые товары: отдельные окна категорий, товаров и формы",
+  "version": "0.5.14",
+  "released": "2026-08-30",
+  "notes": "быстрые товары: 177 позиций по категориям, удаление и переименование",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
@@ -11,8 +11,8 @@
     },
     {
       "path": "db.py",
-      "sha256": "b3bf99212e621618500b991a5833ebd81a149f70927c6a0b86f8d9a6e22c9f11",
-      "size": 20492
+      "sha256": "c20c70082e7ccc97bdf1a67038a0e0ed2e7aad2a51fa48ef77987ba0ca3bfc45",
+      "size": 35360
     },
     {
       "path": "printer.py",
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "5f4911c5e09163ae237ac168f8e2f219dcf3cb2ef84ad7c6269aba30cea69a0b",
+      "sha256": "a4e6a712594be529762a9a856f695d10094000b1ece70c39b20b00940c885265",
       "size": 871
     },
     {
       "path": "index.html",
-      "sha256": "51fc3617d90e1763b786bbafd6ecb7a9a3e142cf16aee1ed996b2d3e6b0e192d",
-      "size": 129310
+      "sha256": "43424b1db2f195f557eff76a355d1904ac5d5b665629850af1db64fa0d0da0ee",
+      "size": 134251
     },
     {
       "path": "pack/win/launch.py",
@@ -47,8 +47,8 @@
     }
   ],
   "archive": {
-    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.12/tautill-update-0.5.12.zip",
-    "sha256": "bcbdc24a1ab54450c68df34b2fbd6cb1ebd683e09ae41e36943a019b0fbe70d3",
-    "size": 79542
+    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.14/tautill-update-0.5.14.zip",
+    "sha256": "031705de92e488611736f301bc5c503ff5e7d778e63ef759c78d1b3000383ca9",
+    "size": 86132
   }
 }

@@ -103,20 +103,38 @@
      форма.  Раньше всё жило в одном окне с режимом настройки, и настройка
      оказалась ровно тем, чего на кассе быть не должно: невидимым состоянием,
      от которого одно и то же нажатие то продаёт, то правит. */
-  .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));
-     gap:12px;padding:16px;align-content:start;max-height:56vh;overflow-y:auto}
+  /* Пять столбцов и невысокие плитки не от жадности: категорий двадцать, и на
+     старой программе они все помещались на экран разом.  Крупные плитки в три
+     столбца заставляли листать семь рядов, чтобы добраться до последней. */
+  .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));
+     gap:10px;padding:14px;align-content:start;max-height:70vh;overflow-y:auto}
   /* Три к двум, как просили: одинаковые плитки, по которым удобно попадать
      пальцем, и ни одна не выделяется размером. */
   .qtile{aspect-ratio:3/2;display:flex;flex-direction:column;
-     align-items:center;justify-content:center;gap:8px;text-align:center;
-     padding:10px;border:1px solid var(--line);background:#fff;border-radius:8px;
-     cursor:pointer;font:600 15px/1.25 system-ui;color:var(--ink)}
+     align-items:center;justify-content:center;gap:6px;text-align:center;
+     padding:6px 3px;border:1px solid var(--line);background:#fff;
+     border-radius:8px;cursor:pointer;font:600 13px/1.2 system-ui;color:var(--ink);
+     /* Название категории задаёт хозяйка, и одно длинное слово без пробелов
+        иначе вылезает за плитку и ломает ряд.  Пусть лучше переносится. */
+     overflow-wrap:anywhere}
   .qtile:hover{background:#f5f8fb}
-  .qtile .p{font:700 19px system-ui;color:var(--accent);
+  .qtile .p{font:700 16px system-ui;color:var(--accent);
      font-variant-numeric:tabular-nums}
-  .qtile .n{font:400 12px system-ui;color:var(--muted)}
+  .qtile .n{font:400 11px system-ui;color:var(--muted)}
   .qtile.add{background:#eaf7ef;border:2px dashed #7cbb93;color:#1c6b3d;
-     font:700 16px system-ui;letter-spacing:.5px}
+     font:700 13px system-ui;letter-spacing:.4px}
+  /* Тихая кнопка: её видно, когда ищут, и она не спорит с ОПЛАТОЙ и ЗАКРЫТЬ,
+     когда просто продают.  Правило адресное: общий .payfoot button красит
+     текст в белый, и без этого надпись пропадала на светлом фоне. */
+  .payfoot button.quiet{background:#fff;border:1px solid #b9c4d0;color:#44566a;
+     font:700 14px system-ui;letter-spacing:.4px}
+  .qcell{display:flex;flex-direction:column}
+  .qcell .qtile{width:100%}
+  .qtools{display:flex;gap:4px;margin-top:4px}
+  .qtools button{flex:1;padding:5px 2px;border:1px solid var(--line);background:#fff;
+     border-radius:4px;font:600 10px system-ui;cursor:pointer;white-space:nowrap}
+  .qtools button.del{color:var(--red);border-color:#e8bcc4}
+  .qtools button.armed{background:var(--red);border-color:var(--red);color:#fff}
   .qfields{display:grid;grid-template-columns:1fr;gap:12px;padding:16px}
   .qfields label{display:flex;flex-direction:column;gap:5px;font-size:13px;
      color:var(--muted)}
@@ -808,7 +826,8 @@
       <div class="prow"><span class="k">БЫСТРЫЕ ТОВАРЫ</span><span class="v"></span></div>
     </div>
     <div class="paybody"><div class="qgrid" id="qc-list"></div></div>
-    <div class="payfoot" style="grid-template-columns:1fr">
+    <div class="payfoot" style="grid-template-columns:1fr 1fr">
+      <button class="quiet" id="qc-edit">ИЗМЕНИТЬ</button>
       <button class="cancel" id="qc-close">ЗАКРЫТЬ</button>
     </div>
   </div>
@@ -820,8 +839,9 @@
       <div class="prow"><span class="k" id="qi-title"></span><span class="v"></span></div>
     </div>
     <div class="paybody"><div class="qgrid" id="qi-list"></div></div>
-    <div class="payfoot" style="grid-template-columns:1fr 1fr">
+    <div class="payfoot" style="grid-template-columns:1fr 1fr 1fr">
       <button class="exact" id="qi-back">НАЗАД</button>
+      <button class="quiet" id="qi-edit">ИЗМЕНИТЬ</button>
       <button class="cancel" id="qi-close">ЗАКРЫТЬ</button>
     </div>
   </div>
@@ -1780,7 +1800,12 @@ document.addEventListener('keydown', e => {
 // окном НОВЫЙ ТОВАР ниже по файлу, и объявление с тем же именем молча
 // перекрывало это, а не ломалось.  Окна переставали закрываться, и
 // понять почему по поведению было нельзя.
+// qmEdit это не прежний режим настройки: добавление из него не зависит,
+// плитка + КАТЕГОРИЯ и + ПРОДУКТ видны всегда.  Он нужен только чтобы убрать
+// или переименовать, и сбрасывается при каждом открытии окна, чтобы во время
+// продажи нажатие по товару всегда значило одно и то же.
 let quick = [], quickCat = null, quickForm = null, quickBack = null;
+let qmEdit = false, qmArmed = null, quickFormId = null;
 
 const esc = s => String(s === null || s === undefined ? '' : s)
   .replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
@@ -1801,6 +1826,7 @@ async function qmLoad() {
 
 async function qmOpenCats() {
   await qmLoad();
+  qmEdit = false;
   qmHide();
   $('#qmcats').hidden = false;
   qmRenderCats();
@@ -1808,6 +1834,7 @@ async function qmOpenCats() {
 
 function qmOpenItems(id) {
   quickCat = id;
+  qmEdit = false;
   qmHide();
   $('#qmitems').hidden = false;
   qmRenderItems();
@@ -1820,22 +1847,44 @@ function qmClose() {
 }
 
 function qmRenderCats() {
+  $('#qc-edit').textContent = qmEdit ? 'ГОТОВО' : 'ИЗМЕНИТЬ';
   $('#qc-list').innerHTML = quick.map(g => `
-    <button class="qtile" data-cat="${g.id}">${esc(g.name)}
-      <span class="n">${g.items.length} шт.</span></button>`).join('')
+    <div class="qcell">
+      <button class="qtile" data-cat="${g.id}">${esc(g.name)}
+        ${g.items.length ? `<span class="n">${g.items.length} шт.</span>` : ''}
+      </button>
+      ${qmEdit ? `<div class="qtools">
+        <button data-catname="${g.id}">ИМЯ</button>
+        <button class="del" data-label="УБРАТЬ" data-catdel="${g.id}">УБРАТЬ</button>
+      </div>` : ''}
+    </div>`).join('')
     + '<button class="qtile add" id="qc-add">+ КАТЕГОРИЯ</button>';
   $('#qc-list').querySelectorAll('[data-cat]').forEach(b =>
     b.onclick = () => qmOpenItems(+b.dataset.cat));
+  $('#qc-list').querySelectorAll('[data-catname]').forEach(b =>
+    b.onclick = () => qmOpenForm('cat', quick.find(g => g.id === +b.dataset.catname)));
+  $('#qc-list').querySelectorAll('[data-catdel]').forEach(b =>
+    b.onclick = () => qmArm(b, () => qmSend('/api/quick/group/delete',
+                                           {id: +b.dataset.catdel})));
   $('#qc-add').onclick = () => qmOpenForm('cat');
 }
 
 function qmRenderItems() {
   const cat = quick.find(g => g.id === quickCat);
   $('#qi-title').textContent = cat ? cat.name : '';
+  $('#qi-edit').textContent = qmEdit ? 'ГОТОВО' : 'ИЗМЕНИТЬ';
   $('#qi-list').innerHTML = (cat ? cat.items : []).map(it => `
-    <button class="qtile" data-item="${it.id}">${esc(it.name)}
-      <span class="p">${money(it.price)} тг</span></button>`).join('')
+    <div class="qcell">
+      <button class="qtile" data-item="${it.id}">${esc(it.name)}
+        <span class="p">${money(it.price)} тг</span></button>
+      ${qmEdit ? `<div class="qtools">
+        <button class="del" data-label="УБРАТЬ" data-itemdel="${it.id}">УБРАТЬ</button>
+      </div>` : ''}
+    </div>`).join('')
     + '<button class="qtile add" id="qi-add">+ ПРОДУКТ</button>';
+  $('#qi-list').querySelectorAll('[data-itemdel]').forEach(b =>
+    b.onclick = () => qmArm(b, () => qmSend('/api/quick/item/delete',
+                                           {id: +b.dataset.itemdel})));
   $('#qi-list').querySelectorAll('[data-item]').forEach(b => b.onclick = () => {
     const it = (quick.find(g => g.id === quickCat) || {items: []})
       .items.find(x => x.id === +b.dataset.item);
@@ -1843,6 +1892,29 @@ function qmRenderItems() {
   });
   $('#qi-add').onclick = () => qmOpenForm('item');
 }
+
+// Убирают в два нажатия: браузерных диалогов на кассе нет, а промахнуться
+// пальцем по кнопке рядом с товаром слишком легко.
+function qmArm(btn, run) {
+  if (qmArmed === btn) { qmArmed = null; return run(); }
+  if (qmArmed) {
+    qmArmed.classList.remove('armed');
+    qmArmed.textContent = qmArmed.dataset.label || 'УБРАТЬ';
+  }
+  qmArmed = btn;
+  btn.classList.add('armed');
+  btn.textContent = 'ТОЧНО?';
+}
+
+async function qmSend(url, body) {
+  const res = await postJSON(url, body);
+  if (res.error) return toast(res.error, true);
+  await qmLoad();
+  if (!$('#qmitems').hidden) qmRenderItems(); else qmRenderCats();
+}
+
+$('#qc-edit').onclick = () => { qmEdit = !qmEdit; qmArmed = null; qmRenderCats(); };
+$('#qi-edit').onclick = () => { qmEdit = !qmEdit; qmArmed = null; qmRenderItems(); };
 
 function qmAdd(it) {
   if (it.linked && it.product_id) {
@@ -1862,14 +1934,17 @@ function qmAdd(it) {
 
 // Форма открывается поверх, а окно под ней прячется: два полупрозрачных окна
 // друг на друге выглядят как грязь на экране, а вернуться всё равно есть куда.
-function qmOpenForm(kind) {
+function qmOpenForm(kind, existing) {
   quickForm = kind;
-  quickBack = kind === 'cat' ? 'cats' : 'items';
+  quickFormId = existing ? existing.id : null;
+  quickBack = kind === 'item' ? 'items' : 'cats';
   const isCat = kind === 'cat';
-  $('#qf-title').textContent = isCat ? 'НОВАЯ КАТЕГОРИЯ' : 'НОВЫЙ ПРОДУКТ';
+  $('#qf-title').textContent = isCat
+    ? (quickFormId ? 'НАЗВАНИЕ КАТЕГОРИИ' : 'НОВАЯ КАТЕГОРИЯ')
+    : 'НОВЫЙ ПРОДУКТ';
   $('#qf-lprice').hidden = isCat;
   $('#qf-lcode').hidden = isCat;
-  $('#qf-name').value = '';
+  $('#qf-name').value = existing ? existing.name : '';
   $('#qf-price').value = '';
   $('#qf-code').value = '';
   $('#qf-msg').textContent = '';
@@ -1882,6 +1957,7 @@ function qmOpenForm(kind) {
 
 function qmCloseForm() {
   quickForm = null;
+  quickFormId = null;
   closeKbd();
   qmHide();
   if (quickBack === 'items') { $('#qmitems').hidden = false; qmRenderItems(); }
@@ -1897,7 +1973,7 @@ $('#qf-save').onclick = async () => {
   if (!quickForm) return;
   const name = $('#qf-name').value.trim();
   const body = quickForm === 'cat'
-    ? {name: name}
+    ? {id: quickFormId, name: name}
     : {group_id: quickCat, name: name,
        price: $('#qf-price').value.trim(), barcode: $('#qf-code').value.trim()};
   const url = quickForm === 'cat' ? '/api/quick/group/save' : '/api/quick/item/save';
@@ -1906,14 +1982,24 @@ $('#qf-save').onclick = async () => {
     $('#qf-msg').textContent = res.error;
     return;
   }
-  // Новая категория сразу открывается: её завели, чтобы что-то в неё положить.
-  const wasCat = quickForm === 'cat';
+  // Возвращаемся туда, откуда форму открыли.  Исключение одно: новую
+  // категорию сразу открываем, её завели, чтобы что-то в неё положить.
+  const newCat = quickForm === 'cat' && !quickFormId;
+  const backTo = quickBack;
   await qmLoad();
   quickForm = null;
+  quickFormId = null;
   closeKbd();
   qmHide();
-  if (wasCat) { qmOpenItems(res.id); }
-  else { $('#qmitems').hidden = false; qmRenderItems(); }
+  if (newCat) {
+    qmOpenItems(res.id);
+  } else if (backTo === 'items') {
+    $('#qmitems').hidden = false;
+    qmRenderItems();
+  } else {
+    $('#qmcats').hidden = false;
+    qmRenderCats();
+  }
 };
 
 // ---------- new product (quick receive, from the sale screen) ----------
