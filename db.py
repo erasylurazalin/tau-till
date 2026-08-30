@@ -3,7 +3,9 @@
 One file, no server, no dependencies.  See backup() for how copies are taken:
 with WAL on, store.db on its own is not the whole database.
 """
+import json
 import os
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -134,6 +136,21 @@ CREATE TABLE IF NOT EXISTS quick_items (
     pos        INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_quick_items_group ON quick_items(group_id);
+
+-- Отложенные чеки.  Покупатель ушёл за забытым товаром, а очередь стоит: чек
+-- убирается в сторону и достаётся обратно, когда он вернётся.
+--
+-- Корзина лежит здесь как JSON, а не разложенная по строкам, намеренно.  Это
+-- черновик, а не бухгалтерия: он никуда не отчитывается, ни в один отчёт не
+-- попадает и живёт до того момента, как его заберут обратно.  Разбирать его
+-- на таблицу значило бы обещать про него больше, чем есть.
+CREATE TABLE IF NOT EXISTS parked (
+    id      INTEGER PRIMARY KEY,
+    ts      TEXT NOT NULL,
+    cashier TEXT,
+    label   TEXT NOT NULL,
+    items   TEXT NOT NULL
+);
 """
 
 def connect():
@@ -622,6 +639,62 @@ def seed_quick(con):
 
     con.execute("PRAGMA user_version = %d" % SEED_VERSION)
     return added
+
+
+def park_label(con):
+    """Свободный номер клиента: КЛИЕНТ 1, КЛИЕНТ 2 и так далее.
+
+    Берём наименьший свободный, а не следующий за наибольшим: забрали первый
+    чек, и номер снова свободен.  Иначе к вечеру на экране КЛИЕНТ 47, и это
+    ничего не значит.
+    """
+    used = set()
+    for r in con.execute("SELECT label FROM parked"):
+        m = re.match(r"^КЛИЕНТ (\d+)$", r["label"] or "")
+        if m:
+            used.add(int(m.group(1)))
+    n = 1
+    while n in used:
+        n += 1
+    return "КЛИЕНТ %d" % n
+
+
+def park_cart(con, cashier, items):
+    """Убрать корзину в сторону и вернуть, под каким именем она легла."""
+    label = park_label(con)
+    con.execute("INSERT INTO parked (ts, cashier, label, items) VALUES (?,?,?,?)",
+                (now_iso(), cashier, label, json.dumps(items, ensure_ascii=False)))
+    return label
+
+
+def parked_list(con):
+    """Отложенные чеки для экрана: без содержимого, только сколько и на сколько."""
+    out = []
+    for r in con.execute("SELECT * FROM parked ORDER BY id"):
+        try:
+            items = json.loads(r["items"])
+        except ValueError:
+            items = []
+        total = 0.0
+        for it in items:
+            gross = (it.get("price") or 0) * (it.get("qty") or 0)
+            total += gross - gross * (it.get("disc") or 0) / 100.0
+        out.append({"id": r["id"], "label": r["label"], "ts": r["ts"],
+                    "cashier": r["cashier"], "count": len(items),
+                    "total": round(total, 2)})
+    return out
+
+
+def take_parked(con, pid):
+    """Достать отложенный чек обратно и убрать его из отложенных."""
+    row = con.execute("SELECT * FROM parked WHERE id = ?", (pid,)).fetchone()
+    if row is None:
+        raise ValueError("этот чек уже забрали")
+    con.execute("DELETE FROM parked WHERE id = ?", (pid,))
+    try:
+        return json.loads(row["items"])
+    except ValueError:
+        return []
 
 
 def quick_menu(con):

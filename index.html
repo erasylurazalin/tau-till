@@ -73,6 +73,9 @@
      поставлены во второй столбец: дальше сетка раскладывает всё сама, а
      назад, в пропущенные клетки, она по умолчанию не возвращается. */
   .keys #qty-minus, .keys #discount{grid-column:2}
+  /* ОТЛОЖКА встаёт в пустую клетку слева от СКИДКИ, верхняя левая остаётся
+     пустой: класть её туда, под палец, который тянется к − КОЛ-ВО, не стоит. */
+  .keys #park{grid-column:1}
   /* Единственная надпись, которая не влезает в 90 px в два слова. */
   /* Единственная надпись, которая не влезает в 90 px обычным кеглем.  Запас
      оставлен намеренно: на кассе шрифт не тот, что здесь (Windows 7 берёт
@@ -435,6 +438,7 @@
         <button id="qty-set">КОЛ-ВО</button>
         <button id="qty-plus">+ КОЛ-ВО</button>
 
+        <button id="park">ОТЛОЖКА</button>
         <button id="discount">СКИДКА</button>
         <button id="newitem">НОВЫЙ<br>ТОВАР</button>
         <button id="extras">ДОП.<br>ФУНКЦИИ</button>
@@ -820,6 +824,20 @@
 </div>
 
 <!-- ================= EXTRAS MENU ================= -->
+<div class="modal" id="parkmodal" hidden>
+  <div class="paybox" style="width:820px;max-width:94vw">
+    <div class="payhead">
+      <div class="prow"><span class="k">ОТЛОЖЕННЫЕ ЧЕКИ</span>
+        <span class="v" id="pk-hint"></span></div>
+    </div>
+    <div class="paybody"><div class="qgrid" id="pk-list"></div></div>
+    <div class="payfoot" style="grid-template-columns:1fr 1fr">
+      <button class="quiet" id="pk-edit">ИЗМЕНИТЬ</button>
+      <button class="cancel" id="pk-close">ЗАКРЫТЬ</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="qmcats" hidden>
   <div class="paybox" style="width:820px;max-width:94vw">
     <div class="payhead">
@@ -1755,6 +1773,7 @@ document.addEventListener('keydown', e => {
   const modals = {pay: [closePay, '#p-confirm'], num: [closeNum, '#n-ok'],
                   // Enter здесь приходит только со сканера, и приходит он в
                   // поле штрихкода: пусть он и сохраняет позицию.
+                  park: [pkClose, null],
                   qform: [() => $('#qf-cancel').click(), '#qf-save'],
                   qitems: [() => $('#qi-back').click(), null],
                   qcats: [qmClose, null],
@@ -1766,7 +1785,8 @@ document.addEventListener('keydown', e => {
                   void: [closeVoid, '#v-cancel'],
                   quit: [closeQuit, '#q-cancel'],
                   upd: [closeUpd, '#u-cancel']};
-  const open = !$('#qmform').hidden ? 'qform'
+  const open = !$('#parkmodal').hidden ? 'park'
+             : !$('#qmform').hidden ? 'qform'
              : !$('#qmitems').hidden ? 'qitems'
              : !$('#qmcats').hidden ? 'qcats'
              : !$('#updmodal').hidden ? 'upd'
@@ -1787,6 +1807,100 @@ document.addEventListener('keydown', e => {
     e.preventDefault(); confirmBtn.click();
   }
 });
+
+// ---------- отложенные чеки ----------
+// Покупатель ушёл за забытым товаром, а очередь стоит.  Чек убирается в
+// сторону под именем КЛИЕНТ 1 и достаётся обратно, когда он вернётся.
+//
+// Забрать отложенный можно только в пустой чек, и это намеренно.  Свалить
+// два чека в один автоматически значит продать одному покупателю чужой
+// товар, а заметить это в чеке уже поздно.
+let parked = [], pkEdit = false, pkArmed = null;
+
+$('#park').onclick = () => pkOpen();
+
+async function pkLoad() {
+  try {
+    parked = await (await fetch('/api/parked')).json();
+    if (!Array.isArray(parked)) parked = [];
+  } catch (e) {
+    parked = [];
+  }
+}
+
+async function pkOpen() {
+  pkEdit = false;
+  await pkLoad();
+  $('#parkmodal').hidden = false;
+  pkRender();
+}
+
+function pkClose() {
+  $('#parkmodal').hidden = true;
+  closeKbd();
+  $('#scan').focus();
+}
+
+function pkRender() {
+  pkArmed = null;
+  $('#pk-edit').textContent = pkEdit ? 'ГОТОВО' : 'ИЗМЕНИТЬ';
+  $('#pk-edit').hidden = !parked.length;
+  $('#pk-hint').textContent = cart.length
+    ? '' : 'нажмите отложенный чек, чтобы вернуть его';
+  $('#pk-list').innerHTML =
+    (cart.length ? `<button class="qtile add" id="pk-add">+ ОТЛОЖИТЬ ЧЕК
+       <span class="n">${cart.length} поз. · ${money(cartNet())} тг</span></button>` : '')
+    + parked.map(p => `
+      <div class="qcell">
+        <button class="qtile" data-park="${p.id}">${esc(p.label)}
+          <span class="p">${money(p.total)} тг</span>
+          <span class="n">${p.count} поз.</span></button>
+        ${pkEdit ? `<div class="qtools">
+          <button class="del" data-label="УБРАТЬ" data-parkdel="${p.id}">УБРАТЬ</button>
+        </div>` : ''}
+      </div>`).join('');
+  if (!cart.length && !parked.length)
+    $('#pk-list').innerHTML =
+      '<div class="qmempty">Отложенных чеков нет.<br>' +
+      'Наберите чек и нажмите ОТЛОЖКА, чтобы убрать его в сторону.</div>';
+
+  const add = $('#pk-add');
+  if (add) add.onclick = () => pkSave();
+  $('#pk-list').querySelectorAll('[data-park]').forEach(b =>
+    b.onclick = () => pkTake(+b.dataset.park));
+  $('#pk-list').querySelectorAll('[data-parkdel]').forEach(b =>
+    b.onclick = () => qmArm(b, () => pkDrop(+b.dataset.parkdel)));
+}
+
+async function pkSave() {
+  const res = await postJSON('/api/parked/save', {items: cart});
+  if (res.error) return toast(res.error, true);
+  cart = []; sel = -1; render();
+  pkClose();
+  toast(`Чек отложен как «${res.label}»`);
+}
+
+async function pkTake(id) {
+  if (cart.length)
+    return toast('Сначала отложите или очистите текущий чек', true);
+  const res = await postJSON('/api/parked/take', {id: id});
+  if (res.error) return toast(res.error, true);
+  cart = res.items || [];
+  sel = cart.length - 1;
+  render();
+  pkClose();
+  toast(`Чек возвращён, позиций: ${cart.length}`);
+}
+
+async function pkDrop(id) {
+  const res = await postJSON('/api/parked/drop', {id: id});
+  if (res.error) return toast(res.error, true);
+  await pkLoad();
+  pkRender();
+}
+
+$('#pk-close').onclick = () => pkClose();
+$('#pk-edit').onclick = () => { pkEdit = !pkEdit; pkArmed = null; pkRender(); };
 
 // ---------- быстрые товары ----------
 // Три окна: категории, товары выбранной категории, форма.  Разделены не ради

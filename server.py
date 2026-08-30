@@ -209,6 +209,9 @@ class Handler(BaseHTTPRequestHandler):
                         "uncounted": tot["u"], "nocost": tot["nc"],
                         "noprice": tot["np"]})
 
+        elif u.path == "/api/parked":
+            return self._json(db.parked_list(con))
+
         elif u.path == "/api/quick":
             return self._json(db.quick_menu(con))
 
@@ -427,6 +430,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(self.delete_preview(con, self._body()))
             elif u.path == "/api/quick-add":
                 self._json(self.quick_add(con, self._body()))
+            elif u.path == "/api/parked/save":
+                self._json(self.park_save(con, self._body()))
+            elif u.path == "/api/parked/take":
+                self._json(self.park_take(con, self._body()))
+            elif u.path == "/api/parked/drop":
+                self._json(self.park_drop(con, self._body()))
             elif u.path == "/api/quick/group/save":
                 self._json(self.quick_group_save(con, self._body()))
             elif u.path == "/api/quick/group/delete":
@@ -760,6 +769,36 @@ class Handler(BaseHTTPRequestHandler):
         if not shift:
             raise ValueError("операционный день не открыт, войдите как кассир")
         return shift
+
+    # --- отложенные чеки ------------------------------------------------
+    # Ничего не продаёт и не двигает остаток: чек просто лежит в стороне,
+    # пока покупатель не вернётся.  Поэтому и прав хозяйки тут не спрашиваем.
+    def park_save(self, con, data):
+        shift = self.require_shift(con)
+        items = data.get("items") or []
+        if not items:
+            raise ValueError("нечего откладывать, чек пуст")
+        label = db.park_cart(con, shift["cashier"], items)
+        con.commit()
+        return {"ok": True, "label": label}
+
+    def park_take(self, con, data):
+        self.require_shift(con)
+        pid = data.get("id")
+        if not pid:
+            raise ValueError("не указан отложенный чек")
+        items = db.take_parked(con, pid)
+        con.commit()
+        return {"ok": True, "items": items}
+
+    def park_drop(self, con, data):
+        self.require_shift(con)
+        pid = data.get("id")
+        if not pid:
+            raise ValueError("не указан отложенный чек")
+        con.execute("DELETE FROM parked WHERE id = ?", (pid,))
+        con.commit()
+        return {"ok": True}
 
     # --- быстрые товары -------------------------------------------------
     # Настраивать их может любой кассир, а не только хозяйка.  Испортить тут

@@ -1,18 +1,18 @@
 {
-  "version": "0.5.14",
+  "version": "0.5.15",
   "released": "2026-08-30",
-  "notes": "быстрые товары: 177 позиций по категориям, удаление и переименование",
+  "notes": "отложенные чеки: чек убирается в сторону и достаётся обратно",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
       "path": "server.py",
-      "sha256": "5d4841fac2211f8e54fe2e5db1c7030be58ff98ce83136e5ad9bf5cd983611b0",
-      "size": 47522
+      "sha256": "d4676c0f3f539256e1df36e9a3b0c7bc7ff13d50b27773ffa07360cab6ceb467",
+      "size": 49250
     },
     {
       "path": "db.py",
-      "sha256": "c20c70082e7ccc97bdf1a67038a0e0ed2e7aad2a51fa48ef77987ba0ca3bfc45",
-      "size": 35360
+      "sha256": "0a5ee09733edc232503b9e6c6916a744d906ae7aea8f3aa794700818fc42d2f2",
+      "size": 38582
     },
     {
       "path": "printer.py",
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "a4e6a712594be529762a9a856f695d10094000b1ece70c39b20b00940c885265",
+      "sha256": "22ef7cd0dcb08c7a8ac6d65aa84f7d763970965d5f1b674c55c6bbe6a024b7d1",
       "size": 871
     },
     {
       "path": "index.html",
-      "sha256": "43424b1db2f195f557eff76a355d1904ac5d5b665629850af1db64fa0d0da0ee",
-      "size": 134251
+      "sha256": "4192a3978fa784f8fac73384dbfb802415ac451d1fce8ca917e3821472e17f9f",
+      "size": 138821
     },
     {
       "path": "pack/win/launch.py",
@@ -47,8 +47,8 @@
     }
   ],
   "archive": {
-    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.14/tautill-update-0.5.14.zip",
-    "sha256": "031705de92e488611736f301bc5c503ff5e7d778e63ef759c78d1b3000383ca9",
-    "size": 86132
+    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.15/tautill-update-0.5.15.zip",
+    "sha256": "9591e88b87bb2aa77f7e59b80c6e4fda363233d5484b2b8b85cecc13aa5064ff",
+    "size": 88592
   }
 }
