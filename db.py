@@ -6,8 +6,9 @@ with WAL on, store.db on its own is not the whole database.
 import json
 import os
 import re
+import secrets
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # POS_DB lets a test run point at a throwaway copy instead of the shop's data.
@@ -107,6 +108,22 @@ CREATE INDEX IF NOT EXISTS idx_items_receipt ON receipt_items(receipt_id);
 -- отказом на вставке, чем найти потом в отчёте.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_number
     ON receipts(shift_id, number);
+
+-- Кто сейчас за какой точкой продажи.  Раньше этого не требовалось: сервер
+-- слушал только сам себя, и всё, что до него дотянулось, было кассой по
+-- определению.  Как только порт открыт в сеть магазина, «дотянулось» перестаёт
+-- что-либо значить, и вопрос «кто это пробил» приходится задавать всерьёз.
+--
+-- Смена и вход это разные вещи, и раньше они были одним. Смена одна на
+-- магазин, вход свой у каждого устройства: за одним операционным днём могут
+-- стоять и отец у кассы, и мать с телефоном.
+CREATE TABLE IF NOT EXISTS sessions (
+    token   TEXT PRIMARY KEY,
+    cashier TEXT NOT NULL,
+    device  TEXT,                      -- как устройство себя назвало
+    created TEXT NOT NULL,
+    seen    TEXT NOT NULL
+);
 
 -- Append-only ledger.  products.stock is a cache of this; the ledger is truth.
 CREATE TABLE IF NOT EXISTS stock_moves (
@@ -316,6 +333,48 @@ def now_iso():
 
 
 # --- barcodes -------------------------------------------------------------
+SESSION_DAYS = 30      # сколько живёт вход, если им не пользуются
+
+
+def new_session(con, cashier, device=None):
+    """Завести вход для устройства и вернуть его тайный ключ."""
+    token = secrets.token_urlsafe(32)
+    ts = now_iso()
+    con.execute("INSERT INTO sessions (token, cashier, device, created, seen)"
+                " VALUES (?,?,?,?,?)", (token, cashier, device, ts, ts))
+    return token
+
+
+def session_of(con, token):
+    """Кто вошёл под этим ключом, или None.
+
+    Заодно чистим просроченные: касса работает месяцами, а таблица входов
+    расти без конца не должна.  И отмечаем, когда устройство приходило в
+    последний раз, чтобы хозяйка могла посмотреть, что вообще подключено.
+    """
+    if not token:
+        return None
+    con.execute("DELETE FROM sessions WHERE seen < ?",
+                ((datetime.now() - timedelta(days=SESSION_DAYS))
+                 .isoformat(timespec="seconds"),))
+    row = con.execute("SELECT * FROM sessions WHERE token = ?", (token,)).fetchone()
+    if row is None:
+        return None
+    con.execute("UPDATE sessions SET seen = ? WHERE token = ?",
+                (now_iso(), token))
+    return row
+
+
+def drop_session(con, token):
+    con.execute("DELETE FROM sessions WHERE token = ?", (token,))
+
+
+def sessions_list(con):
+    return [dict(r) for r in con.execute(
+        "SELECT token, cashier, device, created, seen FROM sessions"
+        " ORDER BY seen DESC")]
+
+
 def begin_write(con):
     """Взять блокировку записи до того, как что-то прочитали.
 

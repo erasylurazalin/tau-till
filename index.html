@@ -908,6 +908,8 @@
           <span>печать и отмена любого чека</span></button>
         <button id="x-minimize">СВЕРНУТЬ
           <span>показать рабочий стол Windows</span></button>
+        <button id="x-logout">СМЕНИТЬ КАССИРА
+          <span>выйти и попросить код заново, день не закрывается</span></button>
       </div>
     </div>
     <div class="payfoot" style="grid-template-columns:1fr">
@@ -1814,6 +1816,16 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// Выход только с этого устройства: операционный день продолжается, и второй
+// продавец со своим телефоном ничего не замечает.
+$('#x-logout').onclick = async () => {
+  if (cart.length)
+    return toast('В корзине есть товары, сначала завершите чек', true);
+  await postJSON('/api/logout', {});
+  $('#extrasmodal').hidden = true;
+  showLogin();
+};
+
 // ---------- отложенные чеки ----------
 // Покупатель ушёл за забытым товаром, а очередь стоит.  Чек убирается в
 // сторону под именем КЛИЕНТ 1 и достаётся обратно, когда он вернётся.
@@ -2677,7 +2689,7 @@ async function loadStock() {
 
 // ---------- cashier login / operational day ----------
 let shift = null, isOwner = false, loginName = null;
-let printReport = false, closedShift = null;
+let printReport = false, closedShift = null, meCashier = '';
 
 const when = iso => new Date(iso).toLocaleString('ru-RU',
   {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
@@ -2685,11 +2697,13 @@ const when = iso => new Date(iso).toLocaleString('ru-RU',
 const loginPin = makePin('#l-pad', '#l-dots', '#l-msg', async code => {
   const res = await (await fetch('/api/shift/open', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({cashier: loginName, pin: code})
+    body: JSON.stringify({cashier: loginName, pin: code,
+                          // Чтобы в АДМИНе было видно, что именно подключено.
+                          device: navigator.userAgent.slice(0, 80)})
   })).json();
   if (res.error) return loginPin.fail(res.error === 'неверный код'
     ? 'Неверный код. Попробуйте ещё раз.' : res.error);
-  enterTill(res.shift, res.owner);
+  enterTill(res.shift, res.owner, res.cashier);
 });
 
 function showLogin() {
@@ -2703,14 +2717,16 @@ function showLogin() {
   $('#login').hidden = false;
 }
 
-function enterTill(s, owner) {
+function enterTill(s, owner, cashier) {
   shift = s;
   isOwner = !!owner;
+  meCashier = cashier || (s && s.cashier) || '';
   // Only the owner is offered the admin side at all; the server refuses it
   // for anyone else regardless of what the page shows.
   $('#nav-admin').hidden = !isOwner;
   $('#login').hidden = true;
-  $('#cashier').textContent = s.cashier;
+  // В углу имя того, кто вошёл, а не того, кто утром открыл день.
+  $('#cashier').textContent = meCashier;
   showTab('sale');
 }
 
@@ -2734,8 +2750,11 @@ async function boot() {
     $('#l-pin-step').hidden = false;
     loginPin.reset();
   });
-  // A day left open (browser closed, power cut) is rejoined, not restarted.
-  if (s.open) enterTill(s.shift, s.owner); else showLogin();
+  // Раньше здесь стояло «день открыт, значит пускаем»: страница входила в
+  // кассу сама, никого не спросив.  Пока сервер слушал только сам себя, это
+  // было безобидно.  Теперь пускает вход на этом устройстве, а открытый день
+  // лишь означает, что входящий к нему присоединится.
+  if (s.logged) enterTill(s.shift, s.owner, s.cashier); else showLogin();
 }
 
 // ---------- end of the operational day ----------

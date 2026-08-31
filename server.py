@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 from datetime import datetime
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -29,6 +30,15 @@ HERE = Path(__file__).parent
 # fighting the till that is actually serving the shop.
 PORT = int(os.environ.get("POS_PORT") or 8000)
 HOST = os.environ.get("POS_HOST") or "127.0.0.1"
+COOKIE = "tau"          # имя куки со входом
+
+# Подбор четырёхзначного кода перебором это десять тысяч попыток, то есть
+# ничто, если пробовать без ограничений.  Считаем неудачи по кассиру и после
+# пяти подряд перестаём отвечать на минуту.  В памяти, а не в базе: перезапуск
+# сервера и так сбрасывает счётчик, и это ровно то, чего мы хотим.
+FAILS = {}
+FAIL_LIMIT = 5
+FAIL_PAUSE = 60         # секунд
 PRINTING = "--no-print" not in sys.argv
 # Printed at the top of every receipt.  Set in settings.json on the till, so
 # the shop can be renamed without anyone editing Python.
@@ -117,13 +127,60 @@ def resolve_payment(pay, total):
 
 class Handler(BaseHTTPRequestHandler):
     # --- plumbing -----------------------------------------------------
-    def _json(self, obj, code=200):
+    # Кука входа выставляется не аргументом, а полем: обработчики возвращают
+    # обычный словарь, а маршрутизатор сам заворачивает его в _json, и
+    # протаскивать через него ещё один параметр значило бы трогать все ручки
+    # ради двух.  None это «заголовок не нужен», пустая строка это «стереть».
+    _cookie = None
+
+    def _json(self, obj, code=200, cookie=None):
+        if cookie is None:
+            cookie = self._cookie
         body = json.dumps(obj, ensure_ascii=False).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        if cookie is not None:
+            # HttpOnly: ключ входа не нужен ни одному скрипту на странице, а
+            # так его не достать и через чужой скрипт, если он туда попадёт.
+            # Max-Age большой намеренно: касса не должна просить код каждое
+            # утро, у неё за прилавком нет клавиатуры.
+            bits = ["%s=%s" % (COOKIE, cookie or ""), "Path=/", "HttpOnly",
+                    "SameSite=Lax",
+                    "Max-Age=%d" % (0 if not cookie else db.SESSION_DAYS * 86400)]
+            self.send_header("Set-Cookie", "; ".join(bits))
         self.end_headers()
         self.wfile.write(body)
+
+    def _token(self):
+        """Ключ входа из куки, если он там есть."""
+        raw = self.headers.get("Cookie")
+        if not raw:
+            return None
+        try:
+            jar = SimpleCookie()
+            jar.load(raw)
+        except Exception:
+            return None
+        m = jar.get(COOKIE)
+        return m.value if m else None
+
+    # False значит «ещё не смотрели», None значит «вход не найден».
+    _me = False
+
+    def who(self, con):
+        """Кассир, который вошёл на этом устройстве, или None.
+
+        Единственный источник ответа на вопрос «кто это делает».  Раньше им
+        была открытая смена, но смена одна на магазин, а устройств теперь
+        несколько, и «кто открыл день» перестало отвечать на «кто сейчас
+        пробивает чек».
+        """
+        if self._me is not False:
+            return self._me
+        row = db.session_of(con, self._token())
+        self._me = db.find_cashier(con, row["cashier"]) if row else None
+        return self._me
 
     def _body(self):
         n = int(self.headers.get("Content-Length", 0))
@@ -134,6 +191,7 @@ class Handler(BaseHTTPRequestHandler):
 
     # --- routing ------------------------------------------------------
     def do_GET(self):
+        self._me = False   # вход считается заново на каждый запрос
         u = urlparse(self.path)
         q = parse_qs(u.query)
         con = db.connect()
@@ -223,12 +281,17 @@ class Handler(BaseHTTPRequestHandler):
 
         elif u.path == "/api/shift":
             shift = db.current_shift(con)
-            who = db.find_cashier(con, shift["cashier"]) if shift else None
+            me = self.who(con)
             self._json({
                 "open": shift is not None,
                 "shift": dict(shift) if shift else None,
+                # Вошли ли на ЭТОМ устройстве.  Раньше страница пускала к
+                # кассе просто потому, что день открыт, то есть любой, кто
+                # открыл страницу, оказывался кассиром.
+                "logged": me is not None,
+                "cashier": me["name"] if me else None,
                 # Drives whether the АДМИН tab is offered at all.
-                "owner": bool(who and who["is_owner"]),
+                "owner": bool(me and me["is_owner"]),
                 "cashiers": [r["name"] for r in con.execute(
                     "SELECT name FROM cashiers ORDER BY is_owner DESC, name")],
                 # Версия едет тем же ответом, который страница и так просит при
@@ -312,15 +375,16 @@ class Handler(BaseHTTPRequestHandler):
         con.close()
 
     def is_admin(self, con):
-        """Admin rights follow whoever holds the open operational day.
+        """Права администратора у того, кто вошёл на этом устройстве.
 
-        Checked on every request rather than handed out once, so closing the
-        day -- or another cashier taking the till -- ends admin access at the
-        same moment.
+        Проверяется на каждом запросе, а не выдаётся один раз: вышли из
+        системы, и доступ кончился в ту же секунду.  Раньше правом владел
+        держатель открытого дня, то есть любое устройство, дотянувшееся до
+        сервера, пока день открыт.  Пока сервер слушал сам себя, это было
+        одно и то же; с телефоном в сети магазина это уже дыра.
         """
-        shift = db.current_shift(con)
-        who = db.find_cashier(con, shift["cashier"]) if shift else None
-        return bool(who and who["is_owner"])
+        me = self.who(con)
+        return bool(me and me["is_owner"])
 
     # --- cashiers ------------------------------------------------------
     def cashier_add(self, con, data):
@@ -417,6 +481,7 @@ class Handler(BaseHTTPRequestHandler):
                 "name": name}
 
     def do_POST(self):
+        self._me = False   # вход считается заново на каждый запрос
         u = urlparse(self.path)
         con = db.connect()
         if u.path in ADMIN_ROUTES and not self.is_admin(con):
@@ -452,6 +517,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(self.quick_item_save(con, self._body()))
             elif u.path == "/api/quick/item/delete":
                 self._json(self.quick_item_delete(con, self._body()))
+            elif u.path == "/api/logout":
+                self._json(self.logout(con, self._body()))
             elif u.path == "/api/shift/open":
                 self._json(self.shift_open(con, self._body()))
             elif u.path == "/api/shift/close":
@@ -482,32 +549,56 @@ class Handler(BaseHTTPRequestHandler):
 
     # --- operational day ----------------------------------------------
     def shift_open(self, con, data):
-        """Кассир logs in; that moment is the start of the operational day."""
-        who = db.find_cashier(con, data.get("cashier"))
+        """Вход кассира.  Заодно открывает операционный день, если он закрыт.
+
+        Раньше это был вход и открытие дня одной операцией, потому что и то и
+        другое случалось ровно один раз за утро.  Теперь за одним днём стоят
+        двое, и вход у каждого свой: второй входящий присоединяется к уже
+        открытому дню, а не спорит за него.
+        """
+        name = (data.get("cashier") or "").strip()
+        left = FAILS.get(name)
+        if left and left["until"] > time.time():
+            raise ValueError("слишком много попыток, подождите %d секунд"
+                             % int(left["until"] - time.time()))
+
+        who = db.find_cashier(con, name)
         if who is None:
             raise ValueError("неизвестный кассир")
         if str(data.get("pin") or "") != who["pin"]:
+            bad = FAILS.setdefault(name, {"n": 0, "until": 0})
+            bad["n"] += 1
+            if bad["n"] >= FAIL_LIMIT:
+                bad["n"] = 0
+                bad["until"] = time.time() + FAIL_PAUSE
             time.sleep(1)
             raise ValueError("неверный код")
+        FAILS.pop(name, None)
         cashier = who["name"]
 
+        db.begin_write(con)
         open_now = db.current_shift(con)
         if open_now:
-            # Reopening the browser mid-day rejoins that day rather than
-            # starting a second one.  Somebody else's day is not yours to
-            # walk into, though -- only the owner may take one over, and she
-            # needs that to be able to close a day a cashier left running.
-            if open_now["cashier"] != who["name"] and not who["is_owner"]:
-                raise ValueError(
-                    f"день открыт кассиром {open_now['cashier']},"
-                    " сначала нужно его завершить")
-            holder = db.find_cashier(con, open_now["cashier"])
-            return {"ok": True, "resumed": True, "shift": dict(open_now),
-                    # Admin follows the day's cashier, matching what the
-                    # server will actually allow.
-                    "owner": bool(holder and holder["is_owner"])}
-        return {"ok": True, "resumed": False, "owner": bool(who["is_owner"]),
-                "shift": dict(db.open_shift(con, cashier))}
+            # День открыт: входящий встаёт рядом, а не вместо.  Спорить тут
+            # больше не о чем, потому что чек теперь подписан тем, кто его
+            # пробил, а не тем, кто утром открыл день.
+            shift = dict(open_now)
+            resumed = True
+        else:
+            shift = dict(db.open_shift(con, cashier))
+            resumed = False
+        token = db.new_session(con, cashier, (data.get("device") or "").strip() or None)
+        con.commit()
+        self._cookie = token
+        return {"ok": True, "resumed": resumed, "shift": shift,
+                "cashier": cashier, "owner": bool(who["is_owner"])}
+
+    def logout(self, con, data):
+        """Выйти на этом устройстве.  День при этом не закрывается."""
+        db.drop_session(con, self._token())
+        con.commit()
+        self._cookie = ""      # пустая кука с Max-Age=0 стирает старую
+        return {"ok": True}
 
     def shift_top(self, con, shift_id, limit=5):
         return [dict(r) for r in con.execute(
@@ -697,7 +788,9 @@ class Handler(BaseHTTPRequestHandler):
         if not items:
             raise ValueError("пустой чек")
         shift = self.require_shift(con)
-        cashier = shift["cashier"]
+        # Кассир берётся из входа на этом устройстве, а не из смены: за одним
+        # днём стоят двое, и в чеке должно остаться, кто его пробил.
+        cashier = self.who(con)["name"]
         # Блокировку берём до чтения номера: с этого момента и до commit чек
         # целиком (номер, строки, движения склада) складывается в одиночку.
         db.begin_write(con)
@@ -774,11 +867,22 @@ class Handler(BaseHTTPRequestHandler):
                 "printed": printed, "print_error": err}
 
     def require_shift(self, con):
-        """Stock only moves inside an operational day, so the day's report and
-        the ledger always describe the same stretch of time."""
+        """Открытый день и вошедшее устройство: два условия, одна проверка.
+
+        Stock only moves inside an operational day, so the day's report and
+        the ledger always describe the same stretch of time.
+
+        Вход проверяется здесь же намеренно.  Сначала он стоял в самой
+        продаже, и этого хватало ровно до первой соседней ручки: отложить чек
+        неизвестное устройство спокойно могло.  Всё, что меняет данные,
+        и так требует открытого дня, так что это единственное место, куда
+        такую проверку имеет смысл ставить.
+        """
         shift = db.current_shift(con)
         if not shift:
             raise ValueError("операционный день не открыт, войдите как кассир")
+        if self.who(con) is None:
+            raise ValueError("устройство не вошло, введите код кассира")
         return shift
 
     # --- отложенные чеки ------------------------------------------------
@@ -792,7 +896,7 @@ class Handler(BaseHTTPRequestHandler):
         # Номер клиента выбирается по уже занятым, так что читать и писать
         # надо под той же блокировкой, что и чек.
         db.begin_write(con)
-        label = db.park_cart(con, shift["cashier"], items)
+        label = db.park_cart(con, self.who(con)["name"], items)
         con.commit()
         return {"ok": True, "label": label}
 

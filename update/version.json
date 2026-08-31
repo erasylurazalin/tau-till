@@ -1,18 +1,18 @@
 {
-  "version": "0.5.17",
+  "version": "0.5.18",
   "released": "2026-08-31",
-  "notes": "два продавца: чеки не сталкиваются номерами, в отчёте видно кто пробил",
+  "notes": "вход на каждом устройстве свой: чек подписан тем, кто его пробил",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
       "path": "server.py",
-      "sha256": "1ce5dc324c53f39a762258a74cc3d4839a87518e0a4268cb9942051e949c88fa",
-      "size": 50427
+      "sha256": "59a90ca5eb61e7af8a6ce8fdfaa3577cb5f9eae9f0388bb639532aec59dc8751",
+      "size": 57088
     },
     {
       "path": "db.py",
-      "sha256": "639796c7516362e44e28130912ab6f1cc79004d4e6c976b63f71d859821d7757",
-      "size": 44049
+      "sha256": "ae9444be1de270ad201ff332085ba3be32d5ec5ea0ab08b0b85a403367691f18",
+      "size": 46908
     },
     {
       "path": "printer.py",
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "5a7192b298880b4a269acf140451ed374a85942a74b24fd8f6be0cc5c56664ea",
+      "sha256": "b5d4ca20a7d4435a38c460d1bc96d519d2583d91ede5fbd1c5c6488fe932bb78",
       "size": 871
     },
     {
       "path": "index.html",
-      "sha256": "14d4a12e8dff82cf04881f93052c78e11f9eff772b165c98034edb35fbf2d367",
-      "size": 139499
+      "sha256": "7e0dcd3c8289ff519d859a609bf5af9f724b444b72139737eef8af6afc931b21",
+      "size": 140991
     },
     {
       "path": "pack/win/launch.py",
@@ -47,8 +47,8 @@
     }
   ],
   "archive": {
-    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.17/tautill-update-0.5.17.zip",
-    "sha256": "fb3d9d3382037673cb8bf69c4e6a8fe403d2c167e23178658ba9849ae6932125",
-    "size": 90990
+    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.18/tautill-update-0.5.18.zip",
+    "sha256": "c953dc5cbc57965fb41442ca6d2246d2f3c94d6c6f4b633c6f2653aef87f09b0",
+    "size": 94397
   }
 }
