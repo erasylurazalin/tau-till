@@ -264,12 +264,20 @@ class Handler(BaseHTTPRequestHandler):
             voided = con.execute(
                 "SELECT COUNT(*) n, COALESCE(SUM(total),0) sum FROM receipts"
                 " WHERE voided = 1 AND shift_id = ?", (sid,)).fetchone()
+            # Кто сколько пробил.  Пока продавец один, это одна строка и
+            # показывать её незачем; смысл появится, когда рядом встанет
+            # второй с телефоном, а деньги всё равно лягут в один ящик.
+            by_cashier = con.execute(
+                "SELECT cashier, COUNT(*) n, SUM(total) sum FROM receipts"
+                " WHERE voided = 0 AND shift_id = ? GROUP BY cashier"
+                " ORDER BY sum DESC", (sid,)).fetchall()
             self._json({
                 "open": True,
                 "shift": dict(shift),
                 "voided": dict(voided),
                 **db.shift_totals(con, sid),   # receipts, revenue, cash, card, profit
                 "by_payment": [dict(r) for r in by_pay],
+                "by_cashier": [dict(r) for r in by_cashier],
                 "top": [dict(r) for r in top],
             })
 
@@ -690,6 +698,9 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("пустой чек")
         shift = self.require_shift(con)
         cashier = shift["cashier"]
+        # Блокировку берём до чтения номера: с этого момента и до commit чек
+        # целиком (номер, строки, движения склада) складывается в одиночку.
+        db.begin_write(con)
         number = db.next_receipt_number(con, shift["id"])
         now = datetime.now()
 
@@ -778,6 +789,9 @@ class Handler(BaseHTTPRequestHandler):
         items = data.get("items") or []
         if not items:
             raise ValueError("нечего откладывать, чек пуст")
+        # Номер клиента выбирается по уже занятым, так что читать и писать
+        # надо под той же блокировкой, что и чек.
+        db.begin_write(con)
         label = db.park_cart(con, shift["cashier"], items)
         con.commit()
         return {"ok": True, "label": label}

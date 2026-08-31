@@ -1,18 +1,18 @@
 {
-  "version": "0.5.16",
-  "released": "2026-08-30",
-  "notes": "сканируются штрихкоды с ведущим нулём и слипшиеся доп. коды",
+  "version": "0.5.17",
+  "released": "2026-08-31",
+  "notes": "два продавца: чеки не сталкиваются номерами, в отчёте видно кто пробил",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
       "path": "server.py",
-      "sha256": "d4676c0f3f539256e1df36e9a3b0c7bc7ff13d50b27773ffa07360cab6ceb467",
-      "size": 49250
+      "sha256": "1ce5dc324c53f39a762258a74cc3d4839a87518e0a4268cb9942051e949c88fa",
+      "size": 50427
     },
     {
       "path": "db.py",
-      "sha256": "99bc26250e263cf847e0f820b8b3dca985ae2ad93fa05966827e2f443773f97f",
-      "size": 41367
+      "sha256": "639796c7516362e44e28130912ab6f1cc79004d4e6c976b63f71d859821d7757",
+      "size": 44049
     },
     {
       "path": "printer.py",
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "17df346af5dc433519a76cd8355db623a595157f60661c2873e1a1be1f7d776c",
+      "sha256": "5a7192b298880b4a269acf140451ed374a85942a74b24fd8f6be0cc5c56664ea",
       "size": 871
     },
     {
       "path": "index.html",
-      "sha256": "4192a3978fa784f8fac73384dbfb802415ac451d1fce8ca917e3821472e17f9f",
-      "size": 138821
+      "sha256": "14d4a12e8dff82cf04881f93052c78e11f9eff772b165c98034edb35fbf2d367",
+      "size": 139499
     },
     {
       "path": "pack/win/launch.py",
@@ -47,8 +47,8 @@
     }
   ],
   "archive": {
-    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.16/tautill-update-0.5.16.zip",
-    "sha256": "68db2d51a45cb42f63b372c776bbf1e35f1d015e62f0a058fd95834c204afedb",
-    "size": 89513
+    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.17/tautill-update-0.5.17.zip",
+    "sha256": "fb3d9d3382037673cb8bf69c4e6a8fe403d2c167e23178658ba9849ae6932125",
+    "size": 90990
   }
 }

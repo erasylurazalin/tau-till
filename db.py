@@ -102,6 +102,11 @@ CREATE TABLE IF NOT EXISTS receipt_items (
     discount   REAL NOT NULL DEFAULT 0  -- tenge taken off this line
 );
 CREATE INDEX IF NOT EXISTS idx_items_receipt ON receipt_items(receipt_id);
+-- Два продавца в одну секунду не должны выдать один номер.  Блокировка на
+-- время записи это уже обеспечивает, но ошибку такого рода лучше поймать
+-- отказом на вставке, чем найти потом в отчёте.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_number
+    ON receipts(shift_id, number);
 
 -- Append-only ledger.  products.stock is a cache of this; the ledger is truth.
 CREATE TABLE IF NOT EXISTS stock_moves (
@@ -158,6 +163,13 @@ def connect():
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
     con.execute("PRAGMA journal_mode = WAL")  # survives an unclean power cut
+    # Пока касса одна, писать в базу может только она, и очередь не возникает.
+    # Со второй точки продажи (телефон в руках второго продавца) два чека
+    # запросто попадают в одну секунду, а SQLite по умолчанию не ждёт своей
+    # очереди ни мгновения: он сразу отвечает «database is locked».  Пять
+    # секунд это вечность для записи в пару килобайт и ровно то, чего хватает,
+    # чтобы второй продавец ничего не заметил.
+    con.execute("PRAGMA busy_timeout = 5000")
     # SQLite's built-in LIKE/LOWER only case-fold ASCII, so "бумага" would
     # never match "Бумага".  Hand the job to Python, which knows Unicode.
     con.create_function("lower_u", 1, lambda s: s.lower() if s else s,
@@ -304,6 +316,20 @@ def now_iso():
 
 
 # --- barcodes -------------------------------------------------------------
+def begin_write(con):
+    """Взять блокировку записи до того, как что-то прочитали.
+
+    Обычная транзакция в sqlite3 начинается на первой записи, а чтения до неё
+    идут сами по себе.  Для «прочитать номер, записать чек» этого мало: два
+    продавца читают один и тот же номер и оба его записывают.  BEGIN IMMEDIATE
+    берёт блокировку сразу, поэтому чтение и запись оказываются в одной
+    транзакции, а второй продавец ждёт свои миллисекунды и получает
+    следующий номер.
+    """
+    if not con.in_transaction:
+        con.execute("BEGIN IMMEDIATE")
+
+
 def find_by_code(con, code):
     """A product by any of its stickers -- the main one or an extra.
 
@@ -833,9 +859,17 @@ def next_receipt_number(con, shift_id):
 
     Numbered per shift rather than per calendar date, so a day that runs past
     midnight keeps counting instead of restarting at 0001 mid-evening.
+
+    Считается от наибольшего выданного номера, а не от количества чеков.
+    Количество совпадает с номером только пока из таблицы ничего не исчезает;
+    максимум верен в любом случае и никогда не выдаёт номер повторно.
+
+    Вызывать только внутри begin_write: иначе два продавца прочитают один и
+    тот же максимум.
     """
-    n = con.execute("SELECT COUNT(*) c FROM receipts WHERE shift_id = ?",
-                    (shift_id,)).fetchone()["c"]
+    n = con.execute(
+        "SELECT COALESCE(MAX(CAST(number AS INTEGER)), 0) m FROM receipts"
+        " WHERE shift_id = ?", (shift_id,)).fetchone()["m"]
     return f"{n + 1:04d}"
 
 

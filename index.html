@@ -592,6 +592,12 @@
       <h3>ПО СПОСОБУ ОПЛАТЫ</h3>
       <table><tbody id="d-pay"></tbody></table>
     </div>
+    <!-- Показывается только когда за день пробивал не один человек: пока
+         продавец один, эта таблица повторяла бы ВЫРУЧКУ одной строкой. -->
+    <div class="panel" id="d-who-panel" style="margin-bottom:12px" hidden>
+      <h3>КТО ПРОБИЛ</h3>
+      <table><tbody id="d-who"></tbody></table>
+    </div>
     <div class="panel" style="margin-bottom:12px">
       <h3>ТОП ТОВАРОВ ЗА ДЕНЬ</h3>
       <table>
@@ -2840,6 +2846,11 @@ async function loadDay() {
     `<tr><td>${p.payment}</td><td class="num">${p.n} чек.</td>
      <td class="num">${money(p.sum)} тг</td></tr>`).join('')
     || '<tr><td class="hint">Продаж пока нет</td></tr>';
+  const who = d.by_cashier || [];
+  $('#d-who-panel').hidden = who.length < 2;
+  $('#d-who').innerHTML = who.map(c =>
+    `<tr><td>${esc(c.cashier)}</td><td class="num">${c.n} чек.</td>
+     <td class="num">${money(c.sum)} тг</td></tr>`).join('');
   $('#d-top').innerHTML = d.top.map(t =>
     `<tr><td>${t.name}</td><td class="num">${t.qty}</td>
      <td class="num">${money(t.sum)} тг</td></tr>`).join('')
