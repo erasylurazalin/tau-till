@@ -73,6 +73,11 @@
      поставлены во второй столбец: дальше сетка раскладывает всё сама, а
      назад, в пропущенные клетки, она по умолчанию не возвращается. */
   .keys #qty-minus, .keys #discount{grid-column:2}
+  /* Кнопка называется quickbtn, а не quick: форма НОВОГО ТОВАРА уже занимает
+     id="quick", а два элемента с одним id это не ошибка, а тихо неверный
+     ответ querySelector.  Кнопка стоит в разметке выше формы, поэтому
+     $('#quick').reset() доставался ей, падал, и вместе с собой уносил и
+     кнопку НОВЫЙ ТОВАР, и открытие карточки на незнакомый штрихкод. */
   /* ОТЛОЖКА встаёт в пустую клетку слева от СКИДКИ, верхняя левая остаётся
      пустой: класть её туда, под палец, который тянется к − КОЛ-ВО, не стоит. */
   .keys #park{grid-column:1}
@@ -443,8 +448,8 @@
         <button id="newitem">НОВЫЙ<br>ТОВАР</button>
         <button id="extras">ДОП.<br>ФУНКЦИИ</button>
 
-        <button id="quick">БЫСТРЫЕ<br>ТОВАРЫ</button>
         <button id="universal">УНИВЕРСАЛЬНЫЙ<br>ПРОДУКТ</button>
+        <button id="quickbtn">БЫСТРЫЕ<br>ТОВАРЫ</button>
         <button id="clear">ОЧИСТИТЬ</button>
         <button class="del1" id="remove">УДАЛИТЬ</button>
 
@@ -1945,7 +1950,7 @@ const esc = s => String(s === null || s === undefined ? '' : s)
 const QUICK_WINDOWS = ['#qmcats', '#qmitems', '#qmform'];
 const qmHide = () => QUICK_WINDOWS.forEach(sel => $(sel).hidden = true);
 
-$('#quick').onclick = () => qmOpenCats();
+$('#quickbtn').onclick = () => qmOpenCats();
 
 async function qmLoad() {
   try {

@@ -1,7 +1,7 @@
 {
-  "version": "0.5.18",
+  "version": "0.5.19",
   "released": "2026-08-31",
-  "notes": "вход на каждом устройстве свой: чек подписан тем, кто его пробил",
+  "notes": "НОВЫЙ ТОВАР снова открывается, в том числе на незнакомый штрихкод",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "b5d4ca20a7d4435a38c460d1bc96d519d2583d91ede5fbd1c5c6488fe932bb78",
+      "sha256": "a98ba0fa1cd40563dae7c793d31f79d525af82a85ee8bbd57b996adb17ff1d76",
       "size": 871
     },
     {
       "path": "index.html",
-      "sha256": "7e0dcd3c8289ff519d859a609bf5af9f724b444b72139737eef8af6afc931b21",
-      "size": 140991
+      "sha256": "cf54de03d47809f5ddfe4bc735c68b0fd2c0235ddc3f51f1c77c1e5cd925e34a",
+      "size": 141585
     },
     {
       "path": "pack/win/launch.py",
@@ -47,8 +47,8 @@
     }
   ],
   "archive": {
-    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.18/tautill-update-0.5.18.zip",
-    "sha256": "c953dc5cbc57965fb41442ca6d2246d2f3c94d6c6f4b633c6f2653aef87f09b0",
-    "size": 94397
+    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.19/tautill-update-0.5.19.zip",
+    "sha256": "95b4d28cd4cc6cd214e63f22c69f414f447eb02ad2ee0cacf0a4c8e9f212a5a5",
+    "size": 94611
   }
 }
