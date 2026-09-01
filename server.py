@@ -10,6 +10,7 @@ behind the counter should have to answer.  Set POS_HOST=0.0.0.0 to open the UI
 to a phone on the shop wifi, and expect that box the first time.
 """
 import json
+import math
 import os
 import sqlite3
 import sys
@@ -39,6 +40,12 @@ COOKIE = "tau"          # имя куки со входом
 FAILS = {}
 FAIL_LIMIT = 5
 FAIL_PAUSE = 60         # секунд
+
+# Границы здравого смысла для строки чека.  Всё, что за ними, это либо
+# опечатка, либо чужой клиент, который прислал в кассу мусор.
+QTY_MIN = 0.001
+QTY_MAX = 1_000_000
+PRICE_MAX = 10_000_000  # тенге за единицу
 PRINTING = "--no-print" not in sys.argv
 # Printed at the top of every receipt.  Set in settings.json on the till, so
 # the shop can be renamed without anyone editing Python.
@@ -86,9 +93,16 @@ def number_of(value, field, default=0.0):
     if not text:
         return default
     try:
-        return float(text)
+        value = float(text)
     except ValueError:
         raise ValueError(f"{field}: введите число, а не «{text}»")
+    # float() принимает «nan» и «inf» как обычные числа.  Дальше они проходят
+    # сквозь всю арифметику, не спотыкаясь ни об одну проверку (сравнение с
+    # nan всегда ложно), и падают только на записи в базу, где кассир видит
+    # английское «NOT NULL constraint failed».  Проще не пускать их сюда.
+    if not math.isfinite(value):
+        raise ValueError(f"{field}: «{text}» это не число")
+    return value
 
 
 def resolve_payment(pay, total):
@@ -748,6 +762,10 @@ class Handler(BaseHTTPRequestHandler):
         them would make yesterday's paper disagree with the database.  A
         customer returning goods later is a возврат -- a separate operation.
         """
+        # Читаем уже под блокировкой: между проверкой «не отменён ли» и самой
+        # отменой не должно помещаться второе такое же нажатие с телефона,
+        # иначе товар вернётся на полку дважды.
+        db.begin_write(con)
         row = self.receipt_of(con, data)
         shift = self.require_shift(con)
         if row["voided"]:
@@ -804,6 +822,23 @@ class Handler(BaseHTTPRequestHandler):
             qty = number_of(i.get("qty"), "Количество")
             price = number_of(i.get("price"), "Цена")
             disc = number_of(i.get("disc"), "Скидка")
+            # Экранная касса такого не пришлёт: numpad не принимает ноль, а
+            # минуса на нём нет вовсе.  Но чек приходит по сети, и телефон в
+            # роли второй кассы это уже другой клиент.  Отрицательное
+            # количество разворачивает чек наизнанку: сумма уходит в минус,
+            # товар не списывается, а возвращается на полку, и касса
+            # предлагает выдать сдачу больше полученного.
+            if qty < QTY_MIN:
+                raise ValueError("количество должно быть больше нуля")
+            # Верхняя граница нужна не от жадности, а от арифметики: 1e308
+            # штук превращают сумму чека в бесконечность, а та не пишется в
+            # базу и вылезает кассиру английской ошибкой про NOT NULL.
+            if qty > QTY_MAX:
+                raise ValueError(f"количество больше {QTY_MAX:.0f} это опечатка")
+            if price < 0:
+                raise ValueError("цена не может быть отрицательной")
+            if price > PRICE_MAX:
+                raise ValueError(f"цена больше {PRICE_MAX:.0f} тг это опечатка")
             if not 0 <= disc <= 100:
                 raise ValueError("скидка должна быть от 0 до 100 %")
             gross = round(qty * price, 2)
@@ -852,16 +887,21 @@ class Handler(BaseHTTPRequestHandler):
             db.move_stock(con, p["id"], -l["qty"], "sale", ref=number)
         con.commit()
 
+        # С этой строки чек уже записан, и вернуть отсюда ошибку нельзя ни по
+        # какому поводу.  Кассир, увидев «Ошибка», пробьёт тот же чек второй
+        # раз, а первый останется и в базе, и в дневном отчёте, и покупатель
+        # окажется посчитан дважды.  Поэтому ловим здесь вообще всё, включая
+        # сборку самого чека, а не только знакомые сбои принтера.
         printed, err = False, None
-        receipt = sale_receipt(
-            items=lines, total=total, number=number, when=now, cashier=cashier,
-            shop=SHOP_NAME, payment=pay)
-        if PRINTING:
-            try:
+        try:
+            receipt = sale_receipt(
+                items=lines, total=total, number=number, when=now,
+                cashier=cashier, shop=SHOP_NAME, payment=pay)
+            if PRINTING:
                 receipt.send()
                 printed = True
-            except (PermissionError, FileNotFoundError, OSError) as e:
-                err = str(e)  # sale is already saved; printing is best-effort
+        except Exception as e:
+            err = str(e) or e.__class__.__name__
         return {"ok": True, "number": number, "total": total,
                 "change": pay["change"], "payment": pay["label"],
                 "printed": printed, "print_error": err}
@@ -1110,8 +1150,33 @@ class Handler(BaseHTTPRequestHandler):
                 "codes": db.codes_of(con, pid), "added_codes": added}
 
 
+def backup_on_start():
+    """Копия базы при запуске, не чаще раза в сутки.
+
+    Раньше копия снималась только при закрытии дня.  Это значит, что защита
+    магазина от потери базы держалась на том, что каждый вечер кто-то не
+    забудет нажать ЗАКРЫТЬ ДЕНЬ: забыли на неделю, и копии за неделю нет.
+    Касса и так стартует каждое утро, так что запуск это самый надёжный
+    момент.  Сбой копирования не должен мешать открыть магазин.
+    """
+    try:
+        today = datetime.now().strftime("%Y%m%d")
+        have = any(f.name.startswith(f"store-{today}-")
+                   for f in db.BACKUP_DIR.glob(db.BACKUP_GLOB))
+        if have:
+            return
+        con = db.connect()
+        try:
+            print("резервная копия:", db.backup(con).name)
+        finally:
+            con.close()
+    except Exception as e:
+        print("резервную копию сделать не удалось:", e)
+
+
 if __name__ == "__main__":
     db.init()
+    backup_on_start()
     mode = "printing enabled" if PRINTING else "PRINT DISABLED (dev)"
     try:
         srv = ThreadingHTTPServer((HOST, PORT), Handler)

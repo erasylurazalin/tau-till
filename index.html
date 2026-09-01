@@ -685,7 +685,7 @@
     <div class="loginver" id="login-ver"></div>
 
     <div id="l-who-step">
-      <div class="loginsub">Выберите кассира</div>
+      <div class="loginsub" id="l-sub">Выберите кассира</div>
       <div class="cashiers" id="l-cashiers"></div>
     </div>
 
@@ -1217,11 +1217,30 @@ $('#q-yes').onclick = async () => {
     + 'Чтобы включить её снова, нажмите<br>значок КАССА на рабочем столе.</div>';
 };
 
+// Связь с кассой пропадает: сервер перезапустился после обновления, Windows
+// задумался, браузер потерял сокет.  fetch тогда не возвращает ответ, а бросает
+// исключение, и без перехвата экран просто замирает: кнопку погасили перед
+// запросом, включить обратно уже некому, и кассир не видит ни одного слова о
+// том, что случилось.  Отдаём вместо ответа обычную ошибку, которую все места
+// в этом файле уже умеют показывать.
+const OFFLINE = 'нет связи с кассой, попробуйте ещё раз';
+
+async function ask(path, opt, fallback) {
+  try {
+    return await (await fetch(path, opt)).json();
+  } catch (e) {
+    // Места, которые ждут список, ошибку в объекте разобрать не смогут: им
+    // отдаём пустой список, а про обрыв говорим сами.
+    if (fallback !== undefined) { toast(OFFLINE, true); return fallback; }
+    return {error: OFFLINE, offline: true};
+  }
+}
+
 async function postJSON(path, body) {
-  return (await fetch(path, {
+  return ask(path, {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(body)
-  })).json();
+  });
 }
 
 /** POST to an admin-only endpoint.  A refusal means the day is no longer
@@ -1342,7 +1361,7 @@ $('#scan').addEventListener('keydown', async e => {
   if (e.key !== 'Enter') return;
   const q = e.target.value.trim();
   if (!q) return;
-  const rows = await (await fetch('/api/lookup?q=' + encodeURIComponent(q))).json();
+  const rows = await ask('/api/lookup?q=' + encodeURIComponent(q), null, []);
   if (rows.length === 0) {
     // Nothing found is exactly the moment a new product needs creating, and
     // the scanner has already supplied the barcode.
@@ -1396,6 +1415,52 @@ document.addEventListener('keydown', e => {
     scan.value = e.key;
   }
   // Остальные символы штрихкода попадут в поле сами: фокус уже там.
+}, true);
+
+// Сканер не знает, что на экране открыто окно.  Кассир нажал ОПЛАТА, покупатель
+// протянул ещё одну вещь, мама её сканирует: штрихкод набирается в поле
+// «получено наличными», а Enter в конце нажимает ОПЛАТУ.  Чек закрывается
+// раньше времени, на бумаге стоит сдача с тринадцатью цифрами, а недобитые
+// товары исчезают вместе с корзиной.  То же самое в окне КОЛИЧЕСТВО: там
+// штрихкод становится количеством.
+//
+// Отличить сканер от человека можно по скорости: он «печатает» весь код за
+// сотню миллисекунд, руками так не попадёшь.  Считаем подряд идущие быстрые
+// символы, и если такой очередью пришёл Enter, значит это был скан: гасим
+// Enter, возвращаем полю прежнее значение и говорим, что произошло.  Настоящая
+// клавиатура при этом продолжает работать: на разработческой машине окна
+// заполняются руками, и ломать это ради кассы не нужно.
+const SCAN_GAP = 40;    // мс между символами, быстрее человека
+const SCAN_MIN = 6;     // столько подряд, чтобы поверить в штрихкод
+let burst = {len: 0, at: 0, el: null, was: ''};
+
+document.addEventListener('keydown', e => {
+  if (!$('#login').hidden || !anyModalOpen()) return;
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+  const now = e.timeStamp || Date.now();
+  const fast = now - burst.at < SCAN_GAP && burst.el === e.target;
+
+  if (e.key.length === 1) {
+    // Значение запоминаем до того, как символ попал в поле: фокус в денежных
+    // полях приходит с выделением, и первая же цифра стирает то, что там было.
+    if (fast) { burst.len++; burst.at = now; }
+    else burst = {len: 1, at: now, el: e.target,
+                  was: e.target && 'value' in e.target ? e.target.value : ''};
+    return;
+  }
+  if (e.key !== 'Enter') return;
+  if (!fast || burst.len < SCAN_MIN) { burst.len = 0; return; }
+
+  e.preventDefault();
+  e.stopPropagation();   // до обработчика окон Enter не доходит
+  const el = burst.el;
+  if (el && 'value' in el) {
+    el.value = burst.was;
+    el.dispatchEvent(new Event('input', {bubbles: true}));  // пересчёт сдачи
+    try { el.select(); } catch (_) {}
+  }
+  burst.len = 0;
+  toast('Сначала закройте окно, потом сканируйте', true);
 }, true);
 
 $('#qty-plus').onclick = () => { if (sel >= 0) { cart[sel].qty++; render(); } };
@@ -1475,7 +1540,9 @@ function closeNum() {
 
 function confirmNum() {
   const v = numVal();
-  if (!(v > 0)) return;
+  // Кнопка в этом случае и так погашена, но нажать по ней всё равно можно, и
+  // молчание в ответ читается как «касса зависла».
+  if (!(v > 0)) return toast('Введите число больше нуля', true);
   const done = numDone;
   closeNum();
   done(v);
@@ -1759,12 +1826,11 @@ $('#p-confirm').onclick = async () => {
   const payment = payload();
 
   $('#p-confirm').disabled = true;
-  const res = await (await fetch('/api/sale', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({items: cart, payment})
-  })).json();
+  const res = await postJSON('/api/sale', {items: cart, payment});
   $('#p-confirm').disabled = false;
 
+  // Корзину при ошибке не трогаем: чек не пробит, и повторное нажатие ОПЛАТЫ
+  // это ровно то, что нужно сделать.
   if (res.error) return toast('Ошибка: ' + res.error, true);
   closePay();
   const chg = res.change > 0 ? ` · СДАЧА ${money(res.change)} тг` : '';
@@ -1844,7 +1910,7 @@ $('#park').onclick = () => pkOpen();
 
 async function pkLoad() {
   try {
-    parked = await (await fetch('/api/parked')).json();
+    parked = await ask('/api/parked', null, []);
     if (!Array.isArray(parked)) parked = [];
   } catch (e) {
     parked = [];
@@ -1954,7 +2020,7 @@ $('#quickbtn').onclick = () => qmOpenCats();
 
 async function qmLoad() {
   try {
-    quick = await (await fetch('/api/quick')).json();
+    quick = await ask('/api/quick', null, []);
     if (!Array.isArray(quick)) quick = [];
   } catch (e) {
     quick = [];
@@ -2183,7 +2249,7 @@ $('#quick').onsubmit = e => { e.preventDefault(); saveQuick(); };
 // letting the operator retype a name that already exists.
 $('#k-barcode').addEventListener('change', async e => {
   const q = e.target.value.trim(); if (!q) return;
-  const rows = await (await fetch('/api/lookup?q=' + encodeURIComponent(q))).json();
+  const rows = await ask('/api/lookup?q=' + encodeURIComponent(q), null, []);
   const hit = rows[0];
   if (!hit) return;
   $('#k-name').value = hit.name;
@@ -2247,7 +2313,7 @@ $('#recv').onsubmit = async e => {
 // same item already carries, so nobody adds one twice.
 $('#r-barcode').addEventListener('change', async e => {
   const q = e.target.value.trim(); if (!q) return;
-  const rows = await (await fetch('/api/lookup?q=' + encodeURIComponent(q))).json();
+  const rows = await ask('/api/lookup?q=' + encodeURIComponent(q), null, []);
   const hit = rows[0];
   $('#r-extra').innerHTML = '';
   $('#r-status').textContent = hit
@@ -2273,7 +2339,7 @@ $('#cnt').onsubmit = async e => {
 // Scanning into инвентаризация shows what is on file before anything is typed.
 $('#c-barcode').addEventListener('change', async e => {
   const q = e.target.value.trim(); if (!q) return;
-  const rows = await (await fetch('/api/lookup?q=' + encodeURIComponent(q))).json();
+  const rows = await ask('/api/lookup?q=' + encodeURIComponent(q), null, []);
   const hit = rows[0];
   $('#c-status').textContent = hit
     ? `${hit.name}, сейчас в базе: ${stockText(hit.stock)}`
@@ -2500,7 +2566,7 @@ $('#ca-pin').addEventListener('focus', () =>
   openSetPin({field: '#ca-pin'}, 'НОВЫЙ КАССИР'));
 
 async function loadCashiers() {
-  const rows = await (await fetch('/api/cashiers')).json();
+  const rows = await ask('/api/cashiers', null, []);
   if (rows.error) return;
   $('#cashiers').innerHTML = rows.map(c => `<tr data-id="${c.id}">
     <td><b>${c.name}</b></td>
@@ -2564,7 +2630,8 @@ $('#s-delmode').onclick = () => {
 $('#s-all').onclick = async () => {
   const params = stockParams();
   params.set('idsonly', '1');
-  const res = await (await fetch('/api/products?' + params)).json();
+  const res = await ask('/api/products?' + params, null,
+    {rows: [], shown: 0, total: 0, uncounted: 0, nocost: 0, noprice: 0});
   res.ids.forEach(id => picked.add(id));
   toast(`Выбрано ${res.count} по текущему фильтру, всего ${picked.size}`);
   updateSel();
@@ -2666,7 +2733,8 @@ async function loadStock() {
   // Приёмка и инвентаризация обновляют список после каждой записи.  Пока он
   // свёрнут, обновлять нечего: setStockOpen перечитает его при раскрытии.
   if (!stockOpen) return;
-  const d = await (await fetch('/api/products?' + stockParams())).json();
+  const d = await ask('/api/products?' + stockParams(), null,
+    {rows: [], shown: 0, total: 0, uncounted: 0, nocost: 0, noprice: 0});
   $('#stock').innerHTML = d.rows.map(r => `<tr data-id="${r.id}"
       class="${picked.has(r.id) ? 'picked' : ''}">
     <td class="delonly pick"><input type="checkbox" ${picked.has(r.id) ? 'checked' : ''}></td>
@@ -2700,12 +2768,9 @@ const when = iso => new Date(iso).toLocaleString('ru-RU',
   {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
 
 const loginPin = makePin('#l-pad', '#l-dots', '#l-msg', async code => {
-  const res = await (await fetch('/api/shift/open', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({cashier: loginName, pin: code,
-                          // Чтобы в АДМИНе было видно, что именно подключено.
-                          device: navigator.userAgent.slice(0, 80)})
-  })).json();
+  const res = await postJSON('/api/shift/open',
+    // Чтобы в АДМИНе было видно, что именно подключено.
+    {cashier: loginName, pin: code, device: navigator.userAgent.slice(0, 80)});
   if (res.error) return loginPin.fail(res.error === 'неверный код'
     ? 'Неверный код. Попробуйте ещё раз.' : res.error);
   enterTill(res.shift, res.owner, res.cashier);
@@ -2741,13 +2806,27 @@ $('#l-back').onclick = () => {
 };
 
 async function boot() {
-  const s = await (await fetch('/api/shift')).json();
+  const s = await ask('/api/shift');
+  // Браузер на кассе открывается пусковым файлом сразу, а сервер к этому
+  // моменту ещё поднимается: первый запрос вполне может не дойти.  Раньше
+  // страница на этом молча падала, и продавец видел вход без единой кнопки с
+  // именем.  Ждём и пробуем снова, объяснив, чего именно ждём.
+  if (s.error) {
+    // Показываем именно экран входа, а не пустоту: продавцу должно быть видно,
+    // что касса жива и чего-то ждёт.
+    $('#login').hidden = false;
+    $('#l-who-step').hidden = false;
+    $('#l-pin-step').hidden = true;
+    $('#l-sub').textContent = 'Касса запускается, подождите...';
+    return setTimeout(boot, 2000);
+  }
+  $('#l-sub').textContent = 'Выберите кассира';
   // Видна и на экране входа, и в углу во время работы: по телефону это первое,
   // что нужно спросить, когда что-то ведёт себя не так.
   $('#ver').textContent = s.version || '';
   $('#login-ver').textContent = s.version || '';
   $('#l-cashiers').innerHTML =
-    s.cashiers.map(c => `<button data-c="${c}">${c}</button>`).join('');
+    (s.cashiers || []).map(c => `<button data-c="${c}">${c}</button>`).join('');
   $('#l-cashiers').querySelectorAll('button').forEach(b => b.onclick = () => {
     loginName = b.dataset.c;
     $('#l-name').textContent = loginName;
@@ -2782,7 +2861,10 @@ function daySummary(d, closedAt) {
 $('#d-finish').onclick = async () => {
   if (cart.length)
     return toast('В корзине есть товары, сначала завершите чек', true);
-  const d = await (await fetch('/api/day')).json();
+  const d = await ask('/api/day', null, {open: false, offline: true});
+  // Пропавшая связь это не закрытый день: про обрыв ask уже сказал сам, и
+  // говорить поверх него неправду про день не надо.
+  if (d.offline) return;
   if (!d.open) return toast('Операционный день не открыт', true);
   $('#c-preview').innerHTML = daySummary(d);
   $('#c-warn').textContent = d.receipts
@@ -2821,10 +2903,7 @@ function showBackup(res) {
 
 $('#c-do').onclick = async () => {
   $('#c-do').disabled = true;
-  const res = await (await fetch('/api/shift/close', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({print: printReport})
-  })).json();
+  const res = await postJSON('/api/shift/close', {print: printReport});
   $('#c-do').disabled = false;
   if (res.error) return toast('Ошибка: ' + res.error, true);
 
@@ -2839,10 +2918,7 @@ $('#c-do').onclick = async () => {
 };
 
 $('#c-reprint').onclick = async () => {
-  const res = await (await fetch('/api/shift/print', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({id: closedShift.id})
-  })).json();
+  const res = await postJSON('/api/shift/print', {id: closedShift.id});
   $('#c-printed').textContent = res.error ? 'Ошибка: ' + res.error
     : res.printed ? 'Отчёт напечатан.'
     : 'Отчёт НЕ напечатан: ' + res.print_error;
@@ -2855,7 +2931,10 @@ $('#c-exit').onclick = () => {
 
 // ---------- day ----------
 async function loadDay() {
-  const d = await (await fetch('/api/day')).json();
+  const d = await ask('/api/day', null, {open: false, offline: true});
+  // Выкидывать на экран входа из-за одного не дошедшего запроса нельзя: для
+  // продавца это выглядит как «касса меня разлогинила посреди дня».
+  if (d.offline) return;
   if (!d.open) return showLogin();
   $('#d-cashier').textContent = d.shift.cashier;
   $('#d-opened').textContent = when(d.shift.opened_at);
@@ -2898,7 +2977,7 @@ function lineNames(r) {
 }
 
 async function loadReceipts() {
-  receipts = await (await fetch('/api/receipts')).json();
+  receipts = await ask('/api/receipts', null, []);
   $('#d-receipts').innerHTML = receipts.map(r => `
     <tr class="${r.voided ? 'voided' : ''}">
       <td>№${r.number}</td>

@@ -1,13 +1,13 @@
 {
-  "version": "0.5.19",
-  "released": "2026-08-31",
-  "notes": "НОВЫЙ ТОВАР снова открывается, в том числе на незнакомый штрихкод",
+  "version": "0.5.20",
+  "released": "2026-09-01",
+  "notes": "Сканер больше не завершает чек за кассира, обрыв связи виден на экране",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
       "path": "server.py",
-      "sha256": "59a90ca5eb61e7af8a6ce8fdfaa3577cb5f9eae9f0388bb639532aec59dc8751",
-      "size": 57088
+      "sha256": "2f3c149278511a67d592e68a53d389666c8ad7fb39f51ced8f4f519139e00c7d",
+      "size": 61827
     },
     {
       "path": "db.py",
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "a98ba0fa1cd40563dae7c793d31f79d525af82a85ee8bbd57b996adb17ff1d76",
+      "sha256": "85dd40bc378ffc57490d027e5c1fffa639531d776bc44a83043ec4602f980b7a",
       "size": 871
     },
     {
       "path": "index.html",
-      "sha256": "cf54de03d47809f5ddfe4bc735c68b0fd2c0235ddc3f51f1c77c1e5cd925e34a",
-      "size": 141585
+      "sha256": "fb25e1e7fbee7798d67d5d895133aa5e6ba513f0c41351a4d04ef782fa161068",
+      "size": 147584
     },
     {
       "path": "pack/win/launch.py",
@@ -47,8 +47,8 @@
     }
   ],
   "archive": {
-    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.19/tautill-update-0.5.19.zip",
-    "sha256": "95b4d28cd4cc6cd214e63f22c69f414f447eb02ad2ee0cacf0a4c8e9f212a5a5",
-    "size": 94611
+    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.20/tautill-update-0.5.20.zip",
+    "sha256": "5973d2bc9a2850f9405aef5e79f17808b835df06814d650d79f5d834be69da38",
+    "size": 98209
   }
 }
