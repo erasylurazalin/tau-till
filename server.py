@@ -515,6 +515,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(self.product_delete(con, self._body()))
             elif u.path == "/api/products/delete-preview":
                 self._json(self.delete_preview(con, self._body()))
+            elif u.path == "/api/products/edit":
+                self._json(self.product_edit(con, self._body()))
             elif u.path == "/api/quick-add":
                 self._json(self.quick_add(con, self._body()))
             elif u.path == "/api/parked/save":
@@ -1082,6 +1084,45 @@ class Handler(BaseHTTPRequestHandler):
         con.commit()
         p = con.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
         return {"ok": True, "created": created, "product": dict(p)}
+
+    def product_edit(self, con, data):
+        """Правка карточки товара прямо из чека: наименование и цена.
+
+        Меняет базу, а не строку в корзине.  Так и задумано: цена на ценнике
+        разошлась с базой, или название приехало из выгрузки нечитаемым, и
+        поправить это надо там же, где заметили, а не откладывать до вечера.
+
+        Кода хозяйки не спрашиваем.  Товар и так заводится прямо из чека
+        кнопкой НОВЫЙ ТОВАР, и цена там ставится тоже: требовать код ради
+        исправления опечатки в уже заведённом товаре значит, что опечатка
+        останется навсегда.  Закупочная цена и остаток отсюда недоступны:
+        это деньги и склад, им место в ПРИЁМКЕ и инвентаризации.
+        """
+        self.require_shift(con)
+        pid = data.get("id")
+        name = (data.get("name") or "").strip()
+        if not pid:
+            raise ValueError("не выбран товар")
+        if not name:
+            raise ValueError("укажите наименование")
+        price = number_of(data.get("price"), "Цена продажи")
+        if price <= 0:
+            raise ValueError("укажите цену продажи")
+        if price > PRICE_MAX:
+            raise ValueError(f"цена больше {PRICE_MAX:.0f} тг это опечатка")
+
+        row = con.execute("SELECT * FROM products WHERE id = ?",
+                          (pid,)).fetchone()
+        if row is None:
+            raise ValueError("товар не найден")
+        con.execute("UPDATE products SET name = ?, price = ? WHERE id = ?",
+                    (name, price, pid))
+        con.commit()
+        p = con.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
+        # Прежние значения возвращаем, чтобы касса могла сказать, что именно
+        # изменилось: цена товара это не та правка, которую делают молча.
+        return {"ok": True, "product": dict(p),
+                "was": {"name": row["name"], "price": row["price"]}}
 
     def count(self, con, data):
         """Инвентаризация: record the physically counted quantity.

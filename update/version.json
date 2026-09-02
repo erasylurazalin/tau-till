@@ -1,13 +1,13 @@
 {
-  "version": "0.5.20",
-  "released": "2026-09-01",
-  "notes": "Сканер больше не завершает чек за кассира, обрыв связи виден на экране",
+  "version": "0.6.0",
+  "released": "2026-09-02",
+  "notes": "Сдача остаётся на экране после продажи, вместо кнопки КОЛ-ВО кнопка ИЗМЕНИТЬ ТОВАР",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
       "path": "server.py",
-      "sha256": "2f3c149278511a67d592e68a53d389666c8ad7fb39f51ced8f4f519139e00c7d",
-      "size": 61827
+      "sha256": "de3689046227127ce127a5062d2480c7a5607a4b3e8143d93998ca94ed070a70",
+      "size": 64493
     },
     {
       "path": "db.py",
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "85dd40bc378ffc57490d027e5c1fffa639531d776bc44a83043ec4602f980b7a",
-      "size": 871
+      "sha256": "a4be2cddf6b1e922e994da77d3088e29a49c2d214a5b3f4e401b652bd7c2359f",
+      "size": 869
     },
     {
       "path": "index.html",
-      "sha256": "fb25e1e7fbee7798d67d5d895133aa5e6ba513f0c41351a4d04ef782fa161068",
-      "size": 147584
+      "sha256": "7cf3faaa7609216a066e7748fa076292cab3dd16624b2838795bb304abf400b1",
+      "size": 156496
     },
     {
       "path": "pack/win/launch.py",
@@ -47,8 +47,8 @@
     }
   ],
   "archive": {
-    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.5.20/tautill-update-0.5.20.zip",
-    "sha256": "5973d2bc9a2850f9405aef5e79f17808b835df06814d650d79f5d834be69da38",
-    "size": 98209
+    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.6.0/tautill-update-0.6.0.zip",
+    "sha256": "911619ec7477846aab1f41a8a10f808fd88e009abff11e1e0b6717da32ba1109",
+    "size": 101117
   }
 }

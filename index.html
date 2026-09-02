@@ -58,6 +58,21 @@
   .total{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 18px}
   .total .row{display:flex;justify-content:space-between;font-size:15px;color:var(--muted)}
   .total .big{font-size:30px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+  /* Сдача от только что пробитого чека.  Родители жмут ОПЛАТУ не глядя на
+     экран, отдают товар, и только потом смотрят, сколько сдавать: так было
+     заведено в UMAG, и так они привыкли за годы.  Всплывающая подсказка для
+     этого не годится, она гаснет через две секунды и к тому моменту на неё
+     ещё никто не смотрел.  Поэтому сдача живёт в углу итогов до тех пор,
+     пока не начнётся следующий чек.
+     visibility, а не display: место под блок занято всегда, иначе ИТОГО
+     прыгало бы вверх при каждой продаже, а кнопки под пальцем уезжали. */
+  .total .lastsale{margin-top:18px;padding:12px 14px;border-radius:6px;
+     background:#eef9f2;border:1px solid #cfe9d9;visibility:hidden}
+  .total .lastsale.on{visibility:visible}
+  /* Крупнее итога намеренно: когда сдача на экране, итог всегда ноль, спорить
+     им не за что, а ищут глазами именно её. */
+  .total .lastsale .big{font-size:36px;color:var(--green)}
+  .total .lastsale #ls-warn{color:var(--red);font-weight:600;margin-top:6px}
   /* Матрица 3 на 4.  Все клавиши одного размера и одного цвета: раскрашенные
      по смыслу, они читались как подсказка, которой нет, и глаз всё равно
      искал нужную по надписи.  Исключений два: УДАЛИТЬ красная, потому что
@@ -437,11 +452,20 @@
         <div class="row" style="align-items:baseline;margin-top:6px">
           <span>ИТОГО</span><span class="big" id="total">0.00</span>
         </div>
+        <!-- Сдача от последнего чека.  Место под неё занято всегда, показана
+             она только после продажи: иначе итог прыгал бы вверх-вниз. -->
+        <div class="lastsale" id="lastsale">
+          <div class="row"><span id="ls-num"></span><span id="ls-paid"></span></div>
+          <div class="row" style="align-items:baseline;margin-top:4px">
+            <span>СДАЧА</span><span class="big" id="ls-change">0.00</span>
+          </div>
+          <div class="row" id="ls-warn" hidden></div>
+        </div>
       </div>
       <div class="keys">
         <button id="qty-minus">− КОЛ-ВО</button>
-        <button id="qty-set">КОЛ-ВО</button>
         <button id="qty-plus">+ КОЛ-ВО</button>
+        <button id="edititem">ИЗМЕНИТЬ<br>ТОВАР</button>
 
         <button id="park">ОТЛОЖКА</button>
         <button id="discount">СКИДКА</button>
@@ -766,6 +790,31 @@
     <div class="payfoot two">
       <button class="cancel" id="k-cancel">ОТМЕНА</button>
       <button class="confirm" id="k-save">СОХРАНИТЬ И В ЧЕК</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= EDIT PRODUCT ================= -->
+<!-- Правит карточку в базе, а не строку в чеке: цену видно на ценнике, и
+     расходится она обычно именно там, где по ней пробивают. -->
+<div class="modal" id="editmodal" hidden>
+  <div class="paybox" style="width:min(520px,100%)">
+    <div class="payhead">
+      <div class="prow"><span class="k">ИЗМЕНИТЬ ТОВАР</span><span class="v"></span></div>
+    </div>
+    <div class="paybody">
+      <div class="note" id="e-hint" style="padding:4px 0 12px"></div>
+      <form class="grid big-form" id="edit" style="padding:0">
+        <label>Наименование<input name="name" id="e-name" autocomplete="off" required data-kbd></label>
+        <label>Цена продажи, тг<input name="price" id="e-price"
+               inputmode="decimal" autocomplete="off" required data-num></label>
+      </form>
+      <div class="loginmsg" id="e-status"></div>
+      <div class="note" id="e-note" style="padding:2px 0 0"></div>
+    </div>
+    <div class="payfoot two">
+      <button class="cancel" id="e-cancel">ОТМЕНА</button>
+      <button class="confirm" id="e-save">СОХРАНИТЬ</button>
     </div>
   </div>
 </div>
@@ -1307,7 +1356,30 @@ function render() {
   $('#cart-empty').hidden = cart.length > 0;
   $('#count').textContent = cart.length;
   $('#total').textContent = money(cartNet());
+  // Начался новый чек, значит про сдачу от прошлого пора забыть: две суммы
+  // на одном экране это ровно тот случай, когда отдают не ту.
+  if (cart.length) lastSale = null;
+  showLastSale();
   revealRow(sel);
+}
+
+// Сдача от последнего чека держится на экране, пока не пробьют следующий.
+// Хранится отдельно от корзины: корзина к этому моменту уже пуста.
+let lastSale = null;
+
+function showLastSale() {
+  const box = $('#lastsale');
+  box.classList.toggle('on', !!lastSale);
+  if (!lastSale) return;
+  $('#ls-num').textContent = `ЧЕК №${lastSale.number}`;
+  $('#ls-paid').textContent = lastSale.payment || '';
+  // Ноль сдачи пишем словами.  «0.00» в том же месте, где только что стояла
+  // настоящая сумма, читается как сумма, на которую просто не посмотрели.
+  $('#ls-change').textContent = lastSale.change > 0
+    ? money(lastSale.change) : 'НЕТ';
+  $('#ls-warn').hidden = lastSale.printed;
+  $('#ls-warn').textContent = lastSale.printed ? ''
+    : 'ЧЕК НЕ НАПЕЧАТАН: ' + (lastSale.print_error || 'принтер не ответил');
 }
 
 // Длинный чек не влезает на экран, а новый товар всегда уходит вниз, за край.
@@ -1560,10 +1632,83 @@ function editQty(i) {
   openNum(`КОЛИЧЕСТВО: ${it.name}`, it.qty, v => { it.qty = v; render(); });
 }
 
-$('#qty-set').onclick = () => {
+// ---------- правка товара ----------
+// Кнопки КОЛ-ВО здесь больше нет: количество давно правят нажатием на само
+// «1 шт» в строке чека, и отдельная кнопка на то же самое занимала место.
+// На её месте правка карточки товара, и правит она базу, а не корзину:
+// цена на ценнике разошлась с базой, название из выгрузки приехало нечитаемым,
+// заметили это за кассой, там же и поправили.
+let editIdx = -1;
+
+function openEdit(i) {
+  const it = cart[i];
+  if (!it) return;
+  editIdx = i;
+  $('#e-status').textContent = '';
+  $('#e-name').value = it.name;
+  $('#e-price').value = it.price;
+  // Универсального товара в базе нет вовсе, менять там нечего: правка живёт
+  // ровно до конца этого чека, и сказать об этом надо прямо, иначе кассир
+  // решит, что цена запомнилась.
+  const inBase = it.product_id !== null && it.product_id !== undefined;
+  $('#e-hint').textContent = inBase
+    ? `Сейчас в базе: ${money(it.price)} тг`
+    : 'Разовый товар, в базе его нет.';
+  $('#e-note').textContent = inBase
+    ? 'Новые название и цена запомнятся в базе и попадут в этот чек.'
+    : 'Название и цена поменяются только в этом чеке.';
+  $('#editmodal').hidden = false;
+  $('#e-name').focus();
+}
+
+function closeEdit() {
+  closeKbd();
+  $('#editmodal').hidden = true;
+  editIdx = -1;
+  $('#scan').focus();
+}
+
+async function saveEdit() {
+  const it = cart[editIdx];
+  if (!it) return closeEdit();
+  const name = $('#e-name').value.trim();
+  const price = num($('#e-price'));
+  if (!name) { $('#e-status').textContent = 'Укажите наименование'; return; }
+  if (!(price > 0)) { $('#e-status').textContent = 'Укажите цену продажи'; return; }
+
+  if (it.product_id === null || it.product_id === undefined) {
+    it.name = name; it.price = round2(price);
+    closeEdit(); render();
+    return toast(`«${name}», цена ${money(price)} тг в этом чеке`);
+  }
+
+  $('#e-save').disabled = true;
+  const res = await postJSON('/api/products/edit',
+                             {id: it.product_id, name, price});
+  $('#e-save').disabled = false;
+  if (res.error) { $('#e-status').textContent = res.error; return; }
+
+  // Один и тот же товар может стоять в чеке несколькими строками: цену надо
+  // поправить во всех, иначе в одном чеке он будет по двум ценам.
+  const p = res.product;
+  cart.forEach(l => {
+    if (l.product_id === p.id) { l.name = p.name; l.price = p.price; }
+  });
+  closeEdit();
+  render();
+  const moved = res.was.price !== p.price
+    ? `цена ${money(res.was.price)} → ${money(p.price)} тг`
+    : 'цена прежняя';
+  toast(`Сохранено в базе: «${p.name}», ${moved}`);
+}
+
+$('#edititem').onclick = () => {
   if (sel < 0) return toast('Выберите товар в чеке', true);
-  editQty(sel);
+  openEdit(sel);
 };
+$('#e-cancel').onclick = closeEdit;
+$('#e-save').onclick = saveEdit;
+$('#edit').onsubmit = e => { e.preventDefault(); saveEdit(); };
 
 // ---------- universal item ----------
 // A one-off sale with no catalogue entry: it prints on the cheque and counts
@@ -1837,7 +1982,11 @@ $('#p-confirm').onclick = async () => {
   toast(res.printed
     ? `Чек №${res.number} на ${money(res.total)} тг${chg}`
     : `Чек №${res.number} сохранён, НЕ напечатан: ${res.print_error}`, !res.printed);
-  cart = []; sel = -1; render();
+  cart = []; sel = -1;
+  // render() гасит блок сдачи, когда в корзине что-то есть, поэтому чек
+  // запоминаем после очистки корзины и до отрисовки.
+  lastSale = res;
+  render();
 };
 
 // Enter confirms, Esc cancels -- no browser dialogs anywhere.
@@ -1857,6 +2006,7 @@ document.addEventListener('keydown', e => {
                   qitems: [() => $('#qi-back').click(), null],
                   qcats: [qmClose, null],
                   quick: [closeQuick, '#k-save'],
+                  edit: [closeEdit, '#e-save'],
                   disc: [() => $('#discmodal').hidden = true, '#dc-ok'],
                   extras: [() => $('#extrasmodal').hidden = true, '#x-close'],
                   // Escape backs out; Enter never confirms a cancellation --
@@ -1873,6 +2023,7 @@ document.addEventListener('keydown', e => {
              : !$('#paymodal').hidden ? 'pay'
              : !$('#numpad').hidden ? 'num'
              : !$('#quickmodal').hidden ? 'quick'
+             : !$('#editmodal').hidden ? 'edit'
              : !$('#voidmodal').hidden ? 'void'
              : !$('#extrasmodal').hidden ? 'extras'
              : !$('#discmodal').hidden ? 'disc' : null;
@@ -3091,6 +3242,9 @@ $('#v-really').onclick = async () => {
                                      : ' НЕ напечатан: ' + res.print_error);
   $('#v-sure').hidden = true;
   $('#v-done').hidden = false;
+  // Отменённый чек не должен оставлять на экране продажи свою сдачу: денег по
+  // нему больше нет, а цифра в углу выглядит так же убедительно, как раньше.
+  if (lastSale && lastSale.number === res.number) { lastSale = null; render(); }
   // loadDay() refreshes the list itself, so only one of the two runs.
   if ($('#tab-day').hidden) await loadReceipts(); else await loadDay();
 };
