@@ -1158,11 +1158,17 @@ class Handler(BaseHTTPRequestHandler):
         row = db.find_by_code(con, barcode) if barcode else None
         if row:
             pid = row["id"]
-            # Update prices only when the form actually supplied them.
-            for field in ("price", "cost"):
+            # Пустое поле значит «не трогай», а не «обнули»: форма приёмки
+            # заполняется не всегда целиком.  Минимальный остаток сюда
+            # добавлен вместе с автозаполнением полей на экране: раз касса
+            # показывает при сканировании то, что лежит в базе, правка этого
+            # числа должна доезжать до базы, а не пропадать молча.
+            for field, label in (("price", "Цена продажи"),
+                                 ("cost", "Закуп. цена"),
+                                 ("min_stock", "Мин. остаток")):
                 if data.get(field) not in (None, ""):
                     con.execute(f"UPDATE products SET {field}=? WHERE id=?",
-                                (number_of(data[field], field), pid))
+                                (number_of(data[field], label), pid))
             created = False
         else:
             if not data.get("name"):

@@ -172,6 +172,9 @@
   form.grid input{padding:9px;border:1px solid var(--line);border-radius:4px;font-size:15px}
   form.grid .actions{grid-column:1/-1;display:flex;gap:8px}
   .codeline{display:flex;gap:6px}
+  /* Штрихкод занимает две колонки: рядом с ним теперь две кнопки, и в
+     одной колонке от самого кода оставался виден только хвост. */
+  form.grid label.wide2{grid-column:span 2}
   .codeline input{flex:1;min-width:0}
   .codeline button{flex:none;width:44px;min-height:44px;border:1px solid var(--line);background:#eef2f6;
      border-radius:4px;font:700 20px system-ui;cursor:pointer;color:var(--accent)}
@@ -179,7 +182,7 @@
      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
   .extracodes:empty{display:none}
   .extracodes label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
-  .extracodes .codeline button{color:var(--red)}
+  .extracodes .codeline button,#r-clearcode{color:var(--red)}
   .knowncodes{grid-column:1/-1;font-size:13px;color:var(--muted);padding:2px 0}
   button.primary{padding:11px 20px;background:var(--accent);color:#fff;border:0;border-radius:6px;font:600 14px system-ui;cursor:pointer}
   .panel > .actions{display:flex;gap:8px;padding:14px 14px 0}
@@ -487,20 +490,21 @@
     <div class="panel">
       <h3>ПРИЁМКА ТОВАРА ПО НАКЛАДНОЙ</h3>
       <form class="grid" id="recv">
-        <label>Штрихкод
+        <label class="wide2">Штрихкод
           <span class="codeline">
             <input name="barcode" id="r-barcode" autocomplete="off">
+            <button type="button" id="r-clearcode" title="Очистить и начать товар заново">×</button>
             <button type="button" id="r-addcode" title="Ещё штрихкод на этот же товар">+</button>
           </span>
         </label>
         <label>Наименование<input name="name" id="r-name" autocomplete="off" data-kbd></label>
         <label>Количество<input name="qty" id="r-qty" inputmode="decimal"
                autocomplete="off" required data-num></label>
-        <label>Закуп. цена<input name="cost" inputmode="decimal"
+        <label>Закуп. цена<input name="cost" id="r-cost" inputmode="decimal"
                autocomplete="off" data-num></label>
-        <label>Цена продажи<input name="price" inputmode="decimal"
+        <label>Цена продажи<input name="price" id="r-price" inputmode="decimal"
                autocomplete="off" data-num></label>
-        <label>Мин. остаток<input name="min_stock" inputmode="decimal"
+        <label>Мин. остаток<input name="min_stock" id="r-min" inputmode="decimal"
                autocomplete="off" data-num></label>
         <label>Накладная<input name="invoice" id="r-invoice" autocomplete="off" data-kbd></label>
         <div class="extracodes" id="r-extra"></div>
@@ -1178,6 +1182,7 @@ function showTab(name) {
   if (name === 'day') loadDay();
   if (name === 'sale') $('#scan').focus();
   if (name === 'receive') $('#r-barcode').focus();
+  else $('#r-invoice').value = '';
 }
 
 document.querySelectorAll('nav button').forEach(b =>
@@ -2437,12 +2442,55 @@ function extraCodes() {
     .map(i => i.value.trim()).filter(Boolean);
 }
 
+// Поля, которые заполняет сканирование.  Количества среди них нет: сколько
+// пришло, знает только накладная, и подставленное старое число тут опаснее
+// пустого поля.
+const RECV_FIELDS = [
+  ['#r-name',  'name',      'наименование не задано'],
+  ['#r-cost',  'cost',      'не указана'],
+  ['#r-price', 'price',     'не указана'],
+  ['#r-min',   'min_stock', 'не задан'],
+];
+
+// Ноль в базе значит «не знаем», а не «бесплатно», поэтому в поле уходит
+// пустота, а рядом подсказка, чего именно не знаем.
+function fillRecv(hit) {
+  RECV_FIELDS.forEach(([sel, field, hint]) => {
+    const el = $(sel), v = hit ? hit[field] : '';
+    const known = field === 'name' ? !!v : Number(v) > 0;
+    el.value = known ? v : '';
+    el.placeholder = hit && !known ? hint : '';
+  });
+}
+
 function resetReceive() {
+  // Накладная одна на всю поставку, а товаров в ней десятки.  reset() стирал
+  // и её, и номер приходилось набирать заново на экранной клавиатуре под
+  // каждую позицию.  Живёт до ухода со вкладки.
+  const invoice = $('#r-invoice').value;
   $('#recv').reset();
+  $('#r-invoice').value = invoice;
+  fillRecv(null);            // reset() возвращает значения, но не подсказки
   $('#r-extra').innerHTML = '';
   $('#r-status').textContent = '';
   $('#r-barcode').focus();
 }
+
+// Клавиатуру на штрихкод не повесить: в это поле пишет сканер.  Значит
+// стереть ошибочный код можно только кнопкой.  Стирается вся строка товара,
+// а не одно поле: если оставить количество от предыдущего, его примут на
+// склад вместе со следующим сканированием.  Накладная остаётся, она одна на
+// всю поставку.
+function clearRecv() {
+  $('#r-barcode').value = '';
+  $('#r-qty').value = '';
+  fillRecv(null);
+  $('#r-extra').innerHTML = '';
+  $('#r-status').textContent = '';
+  $('#r-barcode').focus();
+}
+
+$('#r-clearcode').onclick = clearRecv;
 
 $('#recv').onsubmit = async e => {
   e.preventDefault();
@@ -2470,8 +2518,11 @@ $('#r-barcode').addEventListener('change', async e => {
   $('#r-status').textContent = hit
     ? `Известный товар: ${hit.name} (остаток ${stockText(hit.stock)})`
     : 'Новый товар, укажите наименование';
+  // Заполняется всегда, в том числе пустотой на незнакомый код: иначе после
+  // известного товара в полях остались бы его имя и цены, и они уехали бы
+  // на склад под чужим штрихкодом.
+  fillRecv(hit);
   if (!hit) return;
-  $('#r-name').value = hit.name;
   (hit.codes || []).forEach(c => addCodeBox(c));
 });
 
@@ -2532,15 +2583,19 @@ function kbdBack(el) {
 }
 
 function renderKbd() {
+  // esc обязателен: в раскладке есть кавычка, а неэкранированная кавычка
+  // закрывает атрибут data-k на себе самой.  Кнопка тогда рисуется, но
+  // печатает пустоту, и выглядит это как сломанная клавиша.
   const key = (ch, out, cls) =>
-    `<button data-k="${out ?? ch}" class="${cls || ''}">${ch}</button>`;
+    `<button data-k="${esc(out === undefined || out === null ? ch : out)}"` +
+    ` class="${cls || ''}">${esc(ch)}</button>`;
 
   if (kbdKind === 'num') {
     // A field that only ever holds a number gets digits, not the alphabet.
     const row = (...keys) => `<div class="krow">${keys.join('')}</div>`;
     $('#kbd').innerHTML = `<div class="numdock">` +
       row(key('7'), key('8'), key('9'),
-          `<button data-k="\\b" class="mod">⌫</button>`) +
+          `<button data-k="\\b" class="mod">СТЕРЕТЬ</button>`) +
       row(key('4'), key('5'), key('6'),
           `<button data-k="\\x" class="mod">ОЧИСТИТЬ</button>`) +
       row(key('1'), key('2'), key('3'),
@@ -2557,7 +2612,7 @@ function renderKbd() {
   $('#kbd').innerHTML =
     `<div class="krow">` +
       [...DIGITS].map((d, i) => key(kbdShift ? L.sym[i] : d)).join('') +
-      `<button data-k="\\b" class="mod wide">⌫</button></div>` +
+      `<button data-k="\\b" class="mod wide">СТЕРЕТЬ</button></div>` +
     `<div class="krow">${letters(L.rows[0])}</div>` +
     `<div class="krow">${letters(L.rows[1])}</div>` +
     `<div class="krow">` +
@@ -2567,7 +2622,7 @@ function renderKbd() {
     `<div class="krow">` +
       `<button data-k="\\l" class="mod wide">${L.nextLabel}</button>` +
       `<button data-k="\\c" class="mod wide${kbdCaps ? ' on' : ''}">CAPS</button>` +
-      key('-') + key('/') + key('(') + key(')') + key('"') +
+      key('-') + key('/') + key('(') + key(')') + key('*') +
       `<button data-k=" " class="space">ПРОБЕЛ</button>` +
       `<button data-k="\\d" class="done wide">ГОТОВО</button></div>`;
   wireKbd();

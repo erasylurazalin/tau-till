@@ -1,13 +1,13 @@
 {
-  "version": "0.6.0",
-  "released": "2026-09-02",
-  "notes": "Сдача остаётся на экране после продажи, вместо кнопки КОЛ-ВО кнопка ИЗМЕНИТЬ ТОВАР",
+  "version": "0.6.1",
+  "released": "2026-09-05",
+  "notes": "приёмка сама подставляет цены известного товара, накладная не сбрасывается, крестик стирает штрихкод, клавиатура печатает кавычку",
   "base": "https://raw.githubusercontent.com/erasylurazalin/tau-till/main/",
   "files": [
     {
       "path": "server.py",
-      "sha256": "de3689046227127ce127a5062d2480c7a5607a4b3e8143d93998ca94ed070a70",
-      "size": 64493
+      "sha256": "170172cc72687b7bdbbdc995cdfb3eba1414714969d1ceb84b1c7536b6602b17",
+      "size": 65197
     },
     {
       "path": "db.py",
@@ -31,13 +31,13 @@
     },
     {
       "path": "version.py",
-      "sha256": "a4be2cddf6b1e922e994da77d3088e29a49c2d214a5b3f4e401b652bd7c2359f",
+      "sha256": "2362b537194811aa2db2b6e47b5503636fe76683a2c09d99c083f48011a9c2f8",
       "size": 869
     },
     {
       "path": "index.html",
-      "sha256": "7cf3faaa7609216a066e7748fa076292cab3dd16624b2838795bb304abf400b1",
-      "size": 156496
+      "sha256": "ab9def90e6cdb0873afc23cb8bd8863dac4e470857f1298deeb65598a3520db3",
+      "size": 160116
     },
     {
       "path": "pack/win/launch.py",
@@ -47,8 +47,8 @@
     }
   ],
   "archive": {
-    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.6.0/tautill-update-0.6.0.zip",
-    "sha256": "911619ec7477846aab1f41a8a10f808fd88e009abff11e1e0b6717da32ba1109",
-    "size": 101117
+    "url": "https://github.com/erasylurazalin/tau-till/releases/download/v0.6.1/tautill-update-0.6.1.zip",
+    "sha256": "ab716e390ebe93044262ed3ea21b8f27b499febbb7d5799654ad86dbc7f8cdb2",
+    "size": 102452
   }
 }
